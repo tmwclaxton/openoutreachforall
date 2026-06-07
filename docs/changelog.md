@@ -1,5 +1,11 @@
 # Changelog
 
+## M5 — Unified inbox (2026-06-08)
+- `MessageThreadAdmin` becomes the inbox: filter by account / unread / has-reply / lead source, search by lead + message body, sorted by most-recent message, conversation shown via message inline.
+- **Privacy default** (`ToolScopeFilter`): only threads this tool messaged into (`sent_via_tool` outbound) are shown unless `scope=all` is chosen.
+- Actions: **Mark read** (sets `read_at`) + per-thread `mark-read/` endpoint; **Pause campaign for these leads** (sets active `LeadCampaignState` → `paused_manual`). No hard-delete.
+- Tests: `tests/admin/test_inbox_views.py` (load, privacy default + scope=all, unread filter, mark-read, pause).
+
 ## M4 — InMail action (2026-06-08)
 - `linkedin/actions/inmail.py`: `send_inmail(session, lead, subject, body)` → `{success, skipped, error, linkedin_message_id}`. App-side Playwright composer (`_compose_inmail`, mocked in tests) — no `linkedin_cli` InMail primitive exists.
 - Gated by `LinkedInProfile.has_inmail` (Sales Nav/Recruiter): no capability → **skips cleanly**, sequence continues, no crash. UI failures are captured, not raised.

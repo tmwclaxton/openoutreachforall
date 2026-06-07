@@ -4,6 +4,7 @@ from django.contrib import admin, messages
 from django.db.models import Count
 from django.shortcuts import redirect, render
 from django.urls import path, reverse
+from django.utils import timezone
 from django.utils.html import format_html
 
 from chat.models import ChatMessage
@@ -98,16 +99,97 @@ class MessageInline(admin.TabularInline):
     can_delete = False
 
 
+class UnreadFilter(admin.SimpleListFilter):
+    title = "read status"
+    parameter_name = "read"
+
+    def lookups(self, request, model_admin):
+        return (("unread", "Unread"), ("read", "Read"))
+
+    def queryset(self, request, qs):
+        if self.value() == "unread":
+            return qs.filter(read_at__isnull=True)
+        if self.value() == "read":
+            return qs.filter(read_at__isnull=False)
+        return qs
+
+
+class ToolScopeFilter(admin.SimpleListFilter):
+    """Privacy default: only threads this tool messaged into, unless 'all' is chosen."""
+
+    title = "scope"
+    parameter_name = "scope"
+
+    def lookups(self, request, model_admin):
+        return (("all", "All LinkedIn conversations"),)
+
+    def queryset(self, request, qs):
+        if self.value() == "all":
+            return qs
+        return qs.filter(messages__direction="out", messages__sent_via_tool=True).distinct()
+
+
+class LeadSourceFilter(admin.SimpleListFilter):
+    title = "lead source"
+    parameter_name = "lead_list"
+
+    def lookups(self, request, model_admin):
+        return [(ll.pk, ll.name) for ll in LeadList.objects.all()[:50]]
+
+    def queryset(self, request, qs):
+        if self.value():
+            return qs.filter(lead__lead_list_id=self.value())
+        return qs
+
+
 @admin.register(MessageThread)
 class MessageThreadAdmin(admin.ModelAdmin):
-    list_display = ("lead", "account", "has_inbound_reply", "read_at", "last_message_at", "last_polled_at")
-    list_filter = ("has_inbound_reply", "account")
+    """Unified inbox (M5). Privacy default hides threads not initiated via this tool."""
+
+    list_display = ("lead", "account", "has_inbound_reply", "unread", "last_message_at")
+    list_filter = (ToolScopeFilter, UnreadFilter, "has_inbound_reply", "account", LeadSourceFilter)
+    search_fields = ("lead__public_identifier", "messages__body")
     raw_id_fields = ("lead", "account")
     readonly_fields = ("created_at", "last_polled_at", "last_message_at")
     inlines = (MessageInline,)
+    actions = ("mark_read", "pause_campaign")
+    ordering = ("-last_message_at",)
+
+    @admin.display(boolean=True, description="unread")
+    def unread(self, obj):
+        return obj.read_at is None
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+    @admin.action(description="Mark read")
+    def mark_read(self, request, queryset):
+        n = queryset.update(read_at=timezone.now())
+        self.message_user(request, f"Marked {n} thread(s) read.", messages.SUCCESS)
+
+    @admin.action(description="Pause campaign for these leads")
+    def pause_campaign(self, request, queryset):
+        n = 0
+        for thread in queryset:
+            n += LeadCampaignState.objects.filter(
+                lead=thread.lead, state=LeadCampaignState.State.ACTIVE,
+            ).update(state=LeadCampaignState.State.PAUSED_MANUAL)
+        self.message_user(request, f"Paused {n} active sequence state(s).", messages.SUCCESS)
+
+    def get_urls(self):
+        custom = [
+            path(
+                "<int:thread_id>/mark-read/",
+                self.admin_site.admin_view(self.mark_read_view),
+                name="linkedin_messagethread_mark_read",
+            ),
+        ]
+        return custom + super().get_urls()
+
+    def mark_read_view(self, request, thread_id):
+        MessageThread.objects.filter(pk=thread_id).update(read_at=timezone.now())
+        self.message_user(request, "Thread marked read.", messages.SUCCESS)
+        return redirect("admin:linkedin_messagethread_changelist")
 
 
 @admin.register(Message)
