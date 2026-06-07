@@ -320,6 +320,10 @@ def run_daemon(session):
         from linkedin.sequences.executor import run_due_states
         run_due_states(session)
 
+        # M3: detect replies and stop answered sequences (no-op when none active).
+        from linkedin.inbox.poller import poll_replies
+        poll_replies(session)
+
         task = Task.objects.claim_next()
         if task is None:
             # Nothing ready — reconcile the queue from CRM state. Any deal

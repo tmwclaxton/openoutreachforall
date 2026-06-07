@@ -11,8 +11,8 @@ from crm.models import Lead
 
 from linkedin.leads import importer
 from linkedin.models import (
-    ActionLog, Campaign, LeadCampaignState, LeadList, LinkedInProfile,
-    SearchKeyword, Sequence, SequenceStep, SiteConfig, Task,
+    ActionLog, Campaign, LeadCampaignState, LeadList, LinkedInProfile, Message,
+    MessageThread, SearchKeyword, Sequence, SequenceStep, SiteConfig, Task,
 )
 from linkedin.sequences import executor
 
@@ -85,6 +85,37 @@ class LeadCampaignStateAdmin(admin.ModelAdmin):
     raw_id_fields = ("lead", "campaign", "current_step")
     readonly_fields = ("created_at", "last_action_at")
     date_hierarchy = "next_action_due_at"
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+class MessageInline(admin.TabularInline):
+    model = Message
+    extra = 0
+    fields = ("direction", "body", "sent_at", "sent_via_tool")
+    readonly_fields = fields
+    can_delete = False
+
+
+@admin.register(MessageThread)
+class MessageThreadAdmin(admin.ModelAdmin):
+    list_display = ("lead", "account", "has_inbound_reply", "read_at", "last_message_at", "last_polled_at")
+    list_filter = ("has_inbound_reply", "account")
+    raw_id_fields = ("lead", "account")
+    readonly_fields = ("created_at", "last_polled_at", "last_message_at")
+    inlines = (MessageInline,)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Message)
+class MessageAdmin(admin.ModelAdmin):
+    list_display = ("thread", "direction", "sent_at", "sent_via_tool", "fetched_at")
+    list_filter = ("direction", "sent_via_tool")
+    raw_id_fields = ("thread", "sender_account")
+    readonly_fields = ("fetched_at",)
 
     def has_delete_permission(self, request, obj=None):
         return False

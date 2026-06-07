@@ -1,5 +1,11 @@
 # Changelog
 
+## M3 — Reply detection (2026-06-08)
+- `MessageThread` + `Message` (direction in/out, idempotent by `linkedin_message_id`, `read_at`/`sent_via_tool` for the M5 inbox).
+- `linkedin/inbox/poller.py`: polls active sequence leads' conversations, persists messages, and sets `LeadCampaignState` → `stopped_reply` when an inbound reply arrives after the lead's last action — so a lead who answered is never messaged again. `fetch_thread_messages` is the single mockable boundary over `linkedin_cli`.
+- `manage.py run_reply_poller` + daemon hook + admin (thread/message viewers, no hard-delete). Direction/id inferred heuristically (linkedin_cli's `get_conversation` drops urn/id) — flagged for the cli fork.
+- Tests: `tests/tasks/test_reply_poller.py`, `tests/db/test_message_models.py`.
+
 ## M2 — Sequence engine (2026-06-08)
 - `Sequence` + `SequenceStep` (branching tree: `root`/`success`/`failure`, step types connect/message/inmail/wait/profile_visit/like_post) + `LeadCampaignState` (executor cursor); `Campaign` extended with `sequence`/`lead_list`/`status`.
 - `linkedin/sequences/executor.py`: enrolls lead lists, advances each state through the tree, two-phase connect (send → wait → accepted?→success / not-accepted→failure), message→no-reply branch, InMail-on-failure; browser actions isolated behind mockable wrappers.

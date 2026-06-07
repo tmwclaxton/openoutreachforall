@@ -373,6 +373,57 @@ class LeadCampaignState(models.Model):
         return f"{self.lead_id}@{self.campaign_id} [{self.state}]"
 
 
+class MessageThread(models.Model):
+    """One conversation between an account and a lead — the inbox unit (M3/M5)."""
+
+    lead = models.ForeignKey("crm.Lead", on_delete=models.CASCADE, related_name="threads")
+    account = models.ForeignKey(LinkedInProfile, on_delete=models.CASCADE, related_name="threads")
+    linkedin_thread_id = models.CharField(max_length=255, blank=True, default="")
+    last_polled_at = models.DateTimeField(null=True, blank=True)
+    last_message_at = models.DateTimeField(null=True, blank=True)
+    has_inbound_reply = models.BooleanField(default=False)
+    read_at = models.DateTimeField(null=True, blank=True)  # null = unread (M5)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        app_label = "linkedin"
+        constraints = [
+            models.UniqueConstraint(fields=["lead", "account"], name="unique_thread_per_lead_account"),
+        ]
+
+    def __str__(self):
+        return f"thread:{self.lead_id}/{self.account_id}"
+
+
+class Message(models.Model):
+    class Direction(models.TextChoices):
+        IN = "in", "Incoming"
+        OUT = "out", "Outgoing"
+
+    thread = models.ForeignKey(MessageThread, on_delete=models.CASCADE, related_name="messages")
+    direction = models.CharField(max_length=3, choices=Direction.choices)
+    sender_account = models.ForeignKey(
+        LinkedInProfile, null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+    )
+    body = models.TextField(blank=True, default="")
+    sent_at = models.DateTimeField(null=True, blank=True)
+    linkedin_message_id = models.CharField(max_length=255)
+    sent_via_tool = models.BooleanField(default=False)  # M5 inbox privacy default
+    fetched_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        app_label = "linkedin"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["thread", "linkedin_message_id"], name="unique_message_per_thread",
+            ),
+        ]
+        ordering = ["sent_at"]
+
+    def __str__(self):
+        return f"{self.direction}:{self.linkedin_message_id}"
+
+
 class TaskQuerySet(models.QuerySet):
     def pending(self):
         return self.filter(status=Task.Status.PENDING).order_by("scheduled_at")
