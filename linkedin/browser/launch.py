@@ -42,7 +42,11 @@ def start_browser_session(session):
 
     if not storage_state:
         lp = session.linkedin_profile
-        authenticate(session, username=lp.linkedin_username, password=lp.linkedin_password)
+        if lp.totp_secret:
+            from linkedin.auth.login import login_with_totp
+            login_with_totp(session, lp.linkedin_username, lp.linkedin_password, lp.totp_secret)
+        else:
+            authenticate(session, username=lp.linkedin_username, password=lp.linkedin_password)
         _save_cookies(session)
         logger.info(colored("Login successful – session saved", "green", attrs=["bold"]))
     else:

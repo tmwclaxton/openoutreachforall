@@ -172,6 +172,9 @@ class LinkedInProfile(models.Model):
     # M6: per-action daily caps + least-recently-used marker for round-robin.
     daily_caps_json = models.JSONField(default=default_daily_caps, blank=True)
     last_used_at = models.DateTimeField(null=True, blank=True)
+    # Base32 TOTP secret for native 2FA (Google Authenticator). Sensitive — when
+    # set, login auto-fills the 6-digit code instead of waiting for a human.
+    totp_secret = models.CharField(max_length=128, blank=True, default="")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

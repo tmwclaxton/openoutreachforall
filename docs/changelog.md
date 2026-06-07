@@ -1,5 +1,10 @@
 # Changelog
 
+## Native TOTP 2FA (2026-06-08)
+- `LinkedInProfile.totp_secret` (base32 Google Authenticator secret). `linkedin/auth/totp.py` generates the current 6-digit code via native RFC 6238 (no dependency, verified against the RFC test vector).
+- `linkedin/auth/login.py`: when a profile has a `totp_secret`, login drives the form itself and **auto-fills the 2FA code** instead of waiting for a human; `launch.py` routes to it. Falls back to `linkedin_cli.authenticate` (human-in-the-loop) when no secret is set.
+- Tests: `tests/auth/test_totp.py`.
+
 ## M6 — Per-account daily caps + round-robin (2026-06-08)
 - `LinkedInProfile.daily_caps_json` (default 25 connect / 50 message / 5 inmail / 100 profile_visit·like_post / 50 follow_up) + `last_used_at`; `AccountDailyCounter` (per account/day/action, increment-only, never deleted).
 - `linkedin/accounts/limits.py`: `has_capacity`/`record_action`/`select_account` — least-recently-used account in a campaign's pool with remaining headroom, else None (defer).
