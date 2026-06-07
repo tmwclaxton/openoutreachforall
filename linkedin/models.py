@@ -16,6 +16,10 @@ _RATE_LIMIT_FIELDS = {
     "follow_up": "follow_up_daily_limit",
 }
 
+# Per-account default daily caps (M6) — 25 connects/day is the ban-safe target.
+def default_daily_caps():
+    return {"connect": 25, "message": 50, "inmail": 5, "profile_visit": 100, "like_post": 100, "follow_up": 50}
+
 
 class SiteConfig(models.Model):
     """Singleton model for global site configuration (LLM keys, etc.)."""
@@ -165,6 +169,9 @@ class LinkedInProfile(models.Model):
     newsletter_processed = models.BooleanField(default=False)
     # True when the account has Sales Navigator / Recruiter (InMail available).
     has_inmail = models.BooleanField(default=False)
+    # M6: per-action daily caps + least-recently-used marker for round-robin.
+    daily_caps_json = models.JSONField(default=default_daily_caps, blank=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -424,6 +431,29 @@ class Message(models.Model):
 
     def __str__(self):
         return f"{self.direction}:{self.linkedin_message_id}"
+
+
+class AccountDailyCounter(models.Model):
+    """Per-(account, day, action_type) action tally (M6). Append/increment only;
+    never deleted — history is the audit trail.
+    """
+
+    account = models.ForeignKey(LinkedInProfile, on_delete=models.CASCADE, related_name="daily_counters")
+    date = models.DateField()
+    action_type = models.CharField(max_length=20, choices=ActionLog.ActionType.choices)
+    count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        app_label = "linkedin"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["account", "date", "action_type"], name="unique_counter_per_account_day_action",
+            ),
+        ]
+        indexes = [models.Index(fields=["account", "date"])]
+
+    def __str__(self):
+        return f"{self.account_id}/{self.date}/{self.action_type}={self.count}"
 
 
 class TaskQuerySet(models.QuerySet):

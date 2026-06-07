@@ -85,11 +85,30 @@ def run_due_states(session, campaign=None, limit=None) -> int:
     return count
 
 
+_STEP_ACTION = {
+    SequenceStep.StepType.CONNECT: ActionLog.ActionType.CONNECT,
+    SequenceStep.StepType.MESSAGE: ActionLog.ActionType.MESSAGE,
+    SequenceStep.StepType.INMAIL: ActionLog.ActionType.INMAIL,
+    SequenceStep.StepType.PROFILE_VISIT: ActionLog.ActionType.PROFILE_VISIT,
+    SequenceStep.StepType.LIKE_POST: ActionLog.ActionType.LIKE_POST,
+}
+
+
 def advance_state(session, state) -> None:
     step = state.current_step
     if step is None:
         _complete(state)
         return
+    # M6: defer when this account is at its daily cap for the step's action.
+    action = _STEP_ACTION.get(step.step_type)
+    consumes_cap = action and not (
+        step.step_type == SequenceStep.StepType.CONNECT and state.awaiting_decision
+    )
+    if consumes_cap:
+        from linkedin.accounts.limits import has_capacity
+        if not has_capacity(session.linkedin_profile, action):
+            _defer_to_tomorrow(state)
+            return
     handler = _HANDLERS.get(step.step_type)
     if handler is None:
         raise ValueError(f"Unknown step_type {step.step_type!r}")
@@ -181,18 +200,26 @@ def _complete(state):
     state.save(update_fields=["state", "next_action_due_at"])
 
 
+def _defer_to_tomorrow(state):
+    state.next_action_due_at = timezone.now() + timedelta(days=1)
+    state.save(update_fields=["next_action_due_at"])
+
+
 def _set_state(state, new_state):
     state.state = new_state
     state.save(update_fields=["state"])
 
 
 def _log(session, state, step, action_type):
+    from linkedin.accounts.limits import record_action
+
     ActionLog.objects.create(
         linkedin_profile=session.linkedin_profile,
         campaign=state.campaign,
         action_type=action_type,
         sequence_step=step,
     )
+    record_action(session.linkedin_profile, action_type)
 
 
 # ── Template rendering ────────────────────────────────────────────────

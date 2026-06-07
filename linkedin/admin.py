@@ -12,8 +12,8 @@ from crm.models import Lead
 
 from linkedin.leads import importer
 from linkedin.models import (
-    ActionLog, Campaign, LeadCampaignState, LeadList, LinkedInProfile, Message,
-    MessageThread, SearchKeyword, Sequence, SequenceStep, SiteConfig, Task,
+    AccountDailyCounter, ActionLog, Campaign, LeadCampaignState, LeadList, LinkedInProfile,
+    Message, MessageThread, SearchKeyword, Sequence, SequenceStep, SiteConfig, Task,
 )
 from linkedin.sequences import executor
 
@@ -205,9 +205,69 @@ class MessageAdmin(admin.ModelAdmin):
 
 @admin.register(LinkedInProfile)
 class LinkedInProfileAdmin(admin.ModelAdmin):
-    list_display = ("user", "linkedin_username", "active", "legal_accepted", "has_inmail")
+    list_display = ("user", "linkedin_username", "active", "legal_accepted", "has_inmail", "usage_link")
     list_filter = ("active", "has_inmail")
     raw_id_fields = ("user", "self_lead")
+
+    @admin.display(description="usage")
+    def usage_link(self, obj):
+        if not obj.pk:
+            return ""
+        url = reverse("admin:linkedin_linkedinprofile_daily_usage", args=[obj.pk])
+        return format_html('<a href="{}">daily usage</a>', url)
+
+    def get_urls(self):
+        custom = [
+            path(
+                "<int:account_id>/daily-usage/",
+                self.admin_site.admin_view(self.daily_usage_view),
+                name="linkedin_linkedinprofile_daily_usage",
+            ),
+        ]
+        return custom + super().get_urls()
+
+    def daily_usage_view(self, request, account_id):
+        from datetime import timedelta
+
+        account = LinkedInProfile.objects.get(pk=account_id)
+        today = timezone.now().date()
+        today_counts = {
+            c.action_type: c.count
+            for c in AccountDailyCounter.objects.filter(account=account, date=today)
+        }
+        caps = account.daily_caps_json or {}
+        usage_rows = [
+            {"action": action, "used": today_counts.get(action, 0), "cap": cap}
+            for action, cap in caps.items()
+        ]
+        history = (
+            AccountDailyCounter.objects
+            .filter(account=account, date__gte=today - timedelta(days=30))
+            .order_by("-date", "action_type")
+        )
+        context = {
+            **self.admin_site.each_context(request),
+            "title": f"Daily usage — {account}",
+            "account": account,
+            "usage_rows": usage_rows,
+            "history": history,
+            "opts": self.model._meta,
+        }
+        return render(request, "admin/linkedin/daily_usage.html", context)
+
+
+@admin.register(AccountDailyCounter)
+class AccountDailyCounterAdmin(admin.ModelAdmin):
+    list_display = ("account", "date", "action_type", "count")
+    list_filter = ("action_type", "account")
+    date_hierarchy = "date"
+    readonly_fields = ("account", "date", "action_type", "count")
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_add_permission(self, request):
+        return False
 
 
 @admin.register(SearchKeyword)

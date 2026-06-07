@@ -1,5 +1,11 @@
 # Changelog
 
+## M6 — Per-account daily caps + round-robin (2026-06-08)
+- `LinkedInProfile.daily_caps_json` (default 25 connect / 50 message / 5 inmail / 100 profile_visit·like_post / 50 follow_up) + `last_used_at`; `AccountDailyCounter` (per account/day/action, increment-only, never deleted).
+- `linkedin/accounts/limits.py`: `has_capacity`/`record_action`/`select_account` — least-recently-used account in a campaign's pool with remaining headroom, else None (defer).
+- Executor enforces caps: defers a state to tomorrow when the account is at its cap for the step's action, and records every action in the counter. Admin: per-account **daily-usage** page (today vs cap + 30-day history) + counter list.
+- Tests: `tests/db/test_daily_counter.py`, `tests/tasks/test_account_rotation.py` (cap-then-defer; 10 leads round-robin 5/5 across two accounts).
+
 ## M5 — Unified inbox (2026-06-08)
 - `MessageThreadAdmin` becomes the inbox: filter by account / unread / has-reply / lead source, search by lead + message body, sorted by most-recent message, conversation shown via message inline.
 - **Privacy default** (`ToolScopeFilter`): only threads this tool messaged into (`sent_via_tool` outbound) are shown unless `scope=all` is chosen.
