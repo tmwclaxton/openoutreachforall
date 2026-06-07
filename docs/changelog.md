@@ -1,5 +1,10 @@
 # Changelog
 
+## Dashboard v1 — visual layer (2026-06-08)
+- `/dashboard/` — KPI tiles (connection requests / messages / inmails sent, replies, active, completed), a senders table with live per-action cap usage, and a **sequence flow visualizer** that renders the SequenceStep branching tree (accepted/replied vs not-accepted/no-reply).
+- JSON APIs: `api/kpis`, `api/senders`, `api/sequences`, `api/sequence/<id>` (all `staff_member_required`). Self-contained page — no SPA build pipeline.
+- Tests: `tests/dashboard/test_dashboard_api.py`. NOTE: this is a read-only visual layer; the interactive drag-drop flow *editor* + charted analytics are a further front-end phase.
+
 ## Native TOTP 2FA (2026-06-08)
 - `LinkedInProfile.totp_secret` (base32 Google Authenticator secret). `linkedin/auth/totp.py` generates the current 6-digit code via native RFC 6238 (no dependency, verified against the RFC test vector).
 - `linkedin/auth/login.py`: when a profile has a `totp_secret`, login drives the form itself and **auto-fills the 2FA code** instead of waiting for a human; `launch.py` routes to it. Falls back to `linkedin_cli.authenticate` (human-in-the-loop) when no secret is set.
