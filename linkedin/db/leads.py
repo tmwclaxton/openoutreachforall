@@ -21,11 +21,12 @@ def lead_exists(url: str) -> bool:
     return Lead.objects.filter(public_identifier=pid).exists()
 
 
-def create_enriched_lead(session, url: str, profile: Dict[str, Any]) -> Optional[int]:
+def create_enriched_lead(session, url: str, profile: Dict[str, Any], lead_list=None) -> Optional[int]:
     """Create Lead with full profile data and embedding.
 
     Returns lead PK or None if exists.
     Does NOT create Deal — that comes at qualification.
+    ``lead_list`` optionally attaches the Lead to a manual-import LeadList.
     """
     from crm.models import Lead
 
@@ -45,7 +46,9 @@ def create_enriched_lead(session, url: str, profile: Dict[str, Any]) -> Optional
                 urn, public_id,
             )
             return None
-        lead = Lead.objects.create(linkedin_url=clean_url, public_identifier=public_id)
+        lead = Lead.objects.create(
+            linkedin_url=clean_url, public_identifier=public_id, lead_list=lead_list,
+        )
         _cache_urn_from_profile(lead, profile)
 
     lead.embed_from_profile(profile)

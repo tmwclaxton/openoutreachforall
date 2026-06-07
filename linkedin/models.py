@@ -74,6 +74,50 @@ class Campaign(models.Model):
         app_label = "linkedin"
 
 
+class LeadList(models.Model):
+    """A named collection of leads — the manual-import counterpart to AI
+    auto-discovery. Soft-delete only: set ``archived_at`` to retire a list;
+    rows are never hard-deleted.
+    """
+
+    class SourceType(models.TextChoices):
+        CSV = "csv", "CSV upload"
+        SEARCH_URL = "search_url", "LinkedIn search URL"
+        MANUAL = "manual", "Manual"
+
+    name = models.CharField(max_length=200)
+    owner = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="lead_lists",
+    )
+    source_type = models.CharField(
+        max_length=20,
+        choices=SourceType.choices,
+        default=SourceType.MANUAL,
+    )
+    source_url = models.URLField(max_length=2000, null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    archived_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        app_label = "linkedin"
+
+    def __str__(self):
+        label = self.name or f"LeadList#{self.pk}"
+        return f"(Archived) {label}" if self.archived_at else label
+
+    @property
+    def is_archived(self) -> bool:
+        return self.archived_at is not None
+
+    def archive(self) -> None:
+        """Soft-delete: retire the list without removing any rows."""
+        if self.archived_at is None:
+            self.archived_at = timezone.now()
+            self.save(update_fields=["archived_at"])
+
+
 class LinkedInProfile(models.Model):
     user = models.OneToOneField(
         User,

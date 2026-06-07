@@ -18,6 +18,13 @@ class Lead(models.Model):
     urn = models.CharField(max_length=200, null=True, blank=True, unique=True, db_index=True)
     embedding = models.BinaryField(null=True, blank=True)
     disqualified = models.BooleanField(default=False)
+    lead_list = models.ForeignKey(
+        "linkedin.LeadList",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="leads",
+    )
     creation_date = models.DateTimeField(default=timezone.now)
     update_date = models.DateTimeField(auto_now=True)
 

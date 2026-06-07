@@ -76,8 +76,8 @@ GPR (sklearn, ConstantKernel * RBF) inside Pipeline(StandardScaler, GPR) with BA
 
 Three apps in `INSTALLED_APPS`:
 
-- **`linkedin`** — Main app: Campaign (with users M2M), LinkedInProfile, SearchKeyword, ActionLog, Task models. All automation logic.
-- **`crm`** — Lead (with embedding) and Deal models (in `crm/models/lead.py` and `crm/models/deal.py`). Also defines `Outcome` enum.
+- **`linkedin`** — Main app: Campaign (with users M2M), LinkedInProfile, SearchKeyword, ActionLog, Task, LeadList models. All automation logic. Manual lead import lives in `linkedin/leads/importer.py` (CSV + people-search-URL → `LeadList`); see CLAUDE.md.
+- **`crm`** — Lead (with embedding, optional `lead_list` FK) and Deal models (in `crm/models/lead.py` and `crm/models/deal.py`). Also defines `Outcome` enum.
 - **`chat`** — `ChatMessage` model (GenericForeignKey to any object, content, owner, answer_to threading, topic).
 
 ## CRM Data Model
