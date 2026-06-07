@@ -57,6 +57,13 @@ class SiteConfig(models.Model):
 
 
 class Campaign(models.Model):
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        ACTIVE = "active", "Active"
+        PAUSED = "paused", "Paused"
+        COMPLETED = "completed", "Completed"
+        ARCHIVED = "archived", "Archived"
+
     name = models.CharField(max_length=200, unique=True)
     users = models.ManyToManyField(User, blank=True, related_name="campaigns")
     product_docs = models.TextField(blank=True)
@@ -66,9 +73,25 @@ class Campaign(models.Model):
     action_fraction = models.FloatField(default=0.2)
     seed_public_ids = models.JSONField(default=list, blank=True)
     model_blob = models.BinaryField(null=True, blank=True)
+    # Sequence-driven campaigns (M2): when ``sequence`` is set the campaign is
+    # driven step-by-step over ``lead_list`` leads; when null it stays on the
+    # autonomous AI-discovery path.
+    sequence = models.ForeignKey(
+        "linkedin.Sequence", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="campaigns",
+    )
+    lead_list = models.ForeignKey(
+        "linkedin.LeadList", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="campaigns",
+    )
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
 
     def __str__(self):
         return self.name
+
+    @property
+    def is_sequence_driven(self) -> bool:
+        return self.sequence_id is not None
 
     class Meta:
         app_label = "linkedin"
@@ -210,6 +233,10 @@ class ActionLog(models.Model):
     class ActionType(models.TextChoices):
         CONNECT = "connect", "Connect"
         FOLLOW_UP = "follow_up", "Follow Up"
+        MESSAGE = "message", "Message"
+        INMAIL = "inmail", "InMail"
+        PROFILE_VISIT = "profile_visit", "Profile Visit"
+        LIKE_POST = "like_post", "Like Post"
 
     linkedin_profile = models.ForeignKey(
         LinkedInProfile,
@@ -222,6 +249,10 @@ class ActionLog(models.Model):
         related_name="action_logs",
     )
     action_type = models.CharField(max_length=20, choices=ActionType.choices)
+    sequence_step = models.ForeignKey(
+        "linkedin.SequenceStep", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="action_logs",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -232,6 +263,114 @@ class ActionLog(models.Model):
 
     def __str__(self):
         return f"{self.action_type} by {self.linkedin_profile} at {self.created_at}"
+
+
+class Sequence(models.Model):
+    """An ordered, branching outreach playbook (HeyReach-style). Steps form a
+    tree via ``SequenceStep.parent`` + ``branch``. Soft-delete via ``archived_at``.
+    """
+
+    name = models.CharField(max_length=200)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="sequences")
+    created_at = models.DateTimeField(default=timezone.now)
+    archived_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        app_label = "linkedin"
+
+    def __str__(self):
+        label = self.name or f"Sequence#{self.pk}"
+        return f"(Archived) {label}" if self.archived_at else label
+
+    @property
+    def root_step(self):
+        return self.steps.filter(branch=SequenceStep.Branch.ROOT).order_by("order_in_branch").first()
+
+    def archive(self):
+        if self.archived_at is None:
+            self.archived_at = timezone.now()
+            self.save(update_fields=["archived_at"])
+
+
+class SequenceStep(models.Model):
+    """One node in a Sequence tree. ``parent`` + ``branch`` place it; ``step_type``
+    + ``config`` define the action. ``success`` branch = accepted/replied;
+    ``failure`` branch = not-accepted/no-reply (exact meaning per step_type).
+    """
+
+    class Branch(models.TextChoices):
+        ROOT = "root", "Root"
+        SUCCESS = "success", "Success"
+        FAILURE = "failure", "Failure"
+
+    class StepType(models.TextChoices):
+        CONNECT = "connect", "Send Connection Request"
+        MESSAGE = "message", "Send Message"
+        INMAIL = "inmail", "Send InMail"
+        WAIT = "wait", "Wait"
+        PROFILE_VISIT = "profile_visit", "View Profile"
+        LIKE_POST = "like_post", "Like Post"
+
+    sequence = models.ForeignKey(Sequence, on_delete=models.CASCADE, related_name="steps")
+    parent = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.CASCADE, related_name="children",
+    )
+    branch = models.CharField(max_length=10, choices=Branch.choices, default=Branch.ROOT)
+    step_type = models.CharField(max_length=20, choices=StepType.choices)
+    order_in_branch = models.PositiveIntegerField(default=0)
+    config = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        app_label = "linkedin"
+        ordering = ["order_in_branch"]
+
+    def __str__(self):
+        return f"{self.step_type}#{self.pk}"
+
+    def next_step(self, branch):
+        """The child step on the given branch (``success``/``failure``), or None."""
+        return self.children.filter(branch=branch).order_by("order_in_branch").first()
+
+
+class LeadCampaignState(models.Model):
+    """Per-(lead, campaign) progress through a sequence — the executor's cursor.
+    Never deleted: retired leads move to a terminal ``state``.
+    """
+
+    class State(models.TextChoices):
+        ACTIVE = "active", "Active"
+        COMPLETED = "completed", "Completed"
+        STOPPED_REPLY = "stopped_reply", "Stopped — replied"
+        STOPPED_ERROR = "stopped_error", "Stopped — error"
+        PAUSED_MANUAL = "paused_manual", "Paused (manual)"
+        ARCHIVED = "archived", "Archived"
+
+    lead = models.ForeignKey("crm.Lead", on_delete=models.CASCADE, related_name="campaign_states")
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name="lead_states")
+    current_step = models.ForeignKey(
+        SequenceStep, null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+    )
+    current_branch = models.CharField(
+        max_length=10, choices=SequenceStep.Branch.choices, default=SequenceStep.Branch.ROOT,
+    )
+    state = models.CharField(max_length=20, choices=State.choices, default=State.ACTIVE)
+    # True while a connect step waits to learn if the request was accepted.
+    awaiting_decision = models.BooleanField(default=False)
+    next_action_due_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    last_action_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        app_label = "linkedin"
+        constraints = [
+            models.UniqueConstraint(fields=["lead", "campaign"], name="unique_lead_campaign_state"),
+        ]
+        indexes = [
+            models.Index(fields=["state", "next_action_due_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.lead_id}@{self.campaign_id} [{self.state}]"
 
 
 class TaskQuerySet(models.QuerySet):

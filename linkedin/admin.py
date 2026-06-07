@@ -10,7 +10,11 @@ from chat.models import ChatMessage
 from crm.models import Lead
 
 from linkedin.leads import importer
-from linkedin.models import ActionLog, Campaign, LeadList, LinkedInProfile, SearchKeyword, SiteConfig, Task
+from linkedin.models import (
+    ActionLog, Campaign, LeadCampaignState, LeadList, LinkedInProfile,
+    SearchKeyword, Sequence, SequenceStep, SiteConfig, Task,
+)
+from linkedin.sequences import executor
 
 
 @admin.register(SiteConfig)
@@ -26,8 +30,64 @@ class SiteConfigAdmin(admin.ModelAdmin):
 
 @admin.register(Campaign)
 class CampaignAdmin(admin.ModelAdmin):
-    list_display = ("name", "booking_link", "is_freemium", "action_fraction")
+    list_display = ("name", "status", "sequence", "lead_list", "is_freemium")
+    list_filter = ("status", "is_freemium")
     filter_horizontal = ("users",)
+    raw_id_fields = ("sequence", "lead_list")
+    actions = ("activate_and_enroll",)
+
+    @admin.action(description="Activate + enroll lead_list into the sequence")
+    def activate_and_enroll(self, request, queryset):
+        total = 0
+        for campaign in queryset:
+            if campaign.sequence_id and campaign.lead_list_id:
+                campaign.status = Campaign.Status.ACTIVE
+                campaign.save(update_fields=["status"])
+                total += executor.enroll_campaign(campaign)
+        self.message_user(
+            request, f"Enrolled {total} lead(s) across {queryset.count()} campaign(s).", messages.SUCCESS,
+        )
+
+
+class SequenceStepInline(admin.TabularInline):
+    model = SequenceStep
+    extra = 0
+    fields = ("step_type", "branch", "parent", "order_in_branch", "config")
+    raw_id_fields = ("parent",)
+
+
+@admin.register(Sequence)
+class SequenceAdmin(admin.ModelAdmin):
+    list_display = ("name", "owner", "step_count", "created_at", "archived_at")
+    list_filter = ("archived_at",)
+    search_fields = ("name",)
+    inlines = (SequenceStepInline,)
+    actions = ("archive_selected",)
+
+    @admin.display(description="steps")
+    def step_count(self, obj):
+        return obj.steps.count()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.action(description="Archive selected sequences (soft-delete)")
+    def archive_selected(self, request, queryset):
+        for seq in queryset:
+            seq.archive()
+        self.message_user(request, f"Archived {queryset.count()} sequence(s).", messages.SUCCESS)
+
+
+@admin.register(LeadCampaignState)
+class LeadCampaignStateAdmin(admin.ModelAdmin):
+    list_display = ("lead", "campaign", "state", "current_step", "awaiting_decision", "next_action_due_at")
+    list_filter = ("state", "campaign", "awaiting_decision")
+    raw_id_fields = ("lead", "campaign", "current_step")
+    readonly_fields = ("created_at", "last_action_at")
+    date_hierarchy = "next_action_due_at"
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(LinkedInProfile)

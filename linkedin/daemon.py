@@ -316,6 +316,10 @@ def run_daemon(session):
             rhythm.reset()
             continue
 
+        # M2: advance sequence-driven campaigns (no-op when none enrolled).
+        from linkedin.sequences.executor import run_due_states
+        run_due_states(session)
+
         task = Task.objects.claim_next()
         if task is None:
             # Nothing ready — reconcile the queue from CRM state. Any deal
