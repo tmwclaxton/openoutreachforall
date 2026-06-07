@@ -123,8 +123,8 @@ class MessageAdmin(admin.ModelAdmin):
 
 @admin.register(LinkedInProfile)
 class LinkedInProfileAdmin(admin.ModelAdmin):
-    list_display = ("user", "linkedin_username", "active", "legal_accepted")
-    list_filter = ("active",)
+    list_display = ("user", "linkedin_username", "active", "legal_accepted", "has_inmail")
+    list_filter = ("active", "has_inmail")
     raw_id_fields = ("user", "self_lead")
 
 

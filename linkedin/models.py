@@ -163,6 +163,8 @@ class LinkedInProfile(models.Model):
     legal_accepted = models.BooleanField(default=False)
     cookie_data = models.JSONField(null=True, blank=True)
     newsletter_processed = models.BooleanField(default=False)
+    # True when the account has Sales Navigator / Recruiter (InMail available).
+    has_inmail = models.BooleanField(default=False)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

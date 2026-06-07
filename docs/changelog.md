@@ -1,5 +1,10 @@
 # Changelog
 
+## M4 — InMail action (2026-06-08)
+- `linkedin/actions/inmail.py`: `send_inmail(session, lead, subject, body)` → `{success, skipped, error, linkedin_message_id}`. App-side Playwright composer (`_compose_inmail`, mocked in tests) — no `linkedin_cli` InMail primitive exists.
+- Gated by `LinkedInProfile.has_inmail` (Sales Nav/Recruiter): no capability → **skips cleanly**, sequence continues, no crash. UI failures are captured, not raised.
+- Un-stubs M2's InMail step (executor now calls the real action and only logs on success). Tests: `tests/actions/test_inmail.py` (skip path, success, UI-failure-no-crash, in-sequence skip).
+
 ## M3 — Reply detection (2026-06-08)
 - `MessageThread` + `Message` (direction in/out, idempotent by `linkedin_message_id`, `read_at`/`sent_via_tool` for the M5 inbox).
 - `linkedin/inbox/poller.py`: polls active sequence leads' conversations, persists messages, and sets `LeadCampaignState` → `stopped_reply` when an inbound reply arrives after the lead's last action — so a lead who answered is never messaged again. `fetch_thread_messages` is the single mockable boundary over `linkedin_cli`.

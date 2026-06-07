@@ -78,7 +78,7 @@ class TestSequenceExecutor:
             send_connection_request=lambda *a, **k: None,
             is_connection_accepted=lambda *a, **k: True,
             send_message=lambda *a, **k: None,
-            send_inmail=lambda *a, **k: None,
+            send_inmail=lambda *a, **k: {"success": True},
         ):
             _drive(executor, fake_session, campaign)
 
@@ -101,7 +101,7 @@ class TestSequenceExecutor:
             send_connection_request=lambda *a, **k: None,
             is_connection_accepted=lambda *a, **k: False,
             send_message=lambda *a, **k: None,
-            send_inmail=lambda *a, **k: None,
+            send_inmail=lambda *a, **k: {"success": True},
         ):
             _drive(executor, fake_session, campaign)
 

@@ -124,8 +124,11 @@ def _handle_message(session, state, step):
 
 
 def _handle_inmail(session, state, step):
-    send_inmail(session, state, step)
-    _log(session, state, step, ActionLog.ActionType.INMAIL)
+    result = send_inmail(session, state, step)
+    if result.get("success"):
+        _log(session, state, step, ActionLog.ActionType.INMAIL)
+    else:
+        logger.info("InMail not sent for %s (%s) — continuing", state, result.get("error"))
     _goto(state, step.next_step(Branch.SUCCESS))
 
 
@@ -246,8 +249,12 @@ def send_message(session, state, step):
 
 
 def send_inmail(session, state, step):
-    # Real InMail action arrives in M4; until then this records intent only.
-    logger.warning("InMail step reached but send_inmail not yet implemented (M4) for %s", state)
+    from linkedin.actions.inmail import send_inmail as _send
+
+    ctx = _lead_context(state)
+    subject = render_template(step.config.get("subject", ""), ctx, step.config.get("subject_fallback", ""))
+    body = render_template(step.config.get("body", ""), ctx, step.config.get("body_fallback", ""))
+    return _send(session, state.lead, subject, body)
 
 
 def visit_profile(session, state):
