@@ -2,81 +2,139 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>OpenOutreach — Dashboard</title>
+  <title>OpenOutreach</title>
   <style>
+    * { box-sizing: border-box; }
     body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; background: #f3f4f6; color: #111827; }
-    header { background: #fff; padding: 16px 24px; border-bottom: 1px solid #e5e7eb; font-size: 20px; font-weight: 700; }
-    .wrap { padding: 24px; max-width: 1200px; margin: 0 auto; }
-    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
-    .kpi { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 18px; }
-    .kpi .label { font-size: 13px; color: #6b7280; }
-    .kpi .value { font-size: 30px; font-weight: 700; margin-top: 6px; }
-    h2 { margin-top: 32px; font-size: 16px; }
+    header { background: #111827; color: #fff; padding: 14px 24px; font-size: 18px; font-weight: 700; }
+    nav { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 0 16px; display: flex; gap: 4px; }
+    nav button { background: none; border: none; padding: 14px 16px; font-size: 14px; cursor: pointer; color: #6b7280; border-bottom: 2px solid transparent; }
+    nav button.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 600; }
+    .wrap { padding: 24px; }
+    .tab { display: none; }
+    .tab.active { display: block; }
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
+    .kpi { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; }
+    .kpi .label { font-size: 12px; color: #6b7280; } .kpi .value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+    h2 { font-size: 15px; margin-top: 28px; }
     table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; }
-    th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
-    th { background: #f9fafb; color: #6b7280; font-weight: 600; }
+    th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+    th { background: #f9fafb; color: #6b7280; }
     select { padding: 8px; border-radius: 8px; border: 1px solid #d1d5db; }
-    .tree { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 18px; }
-    .node { border: 1px solid #d1d5db; border-radius: 8px; padding: 6px 12px; display: inline-block; margin: 4px 0; background: #fff; font-size: 13px; }
-    .branch { margin-left: 28px; border-left: 2px solid #e5e7eb; padding-left: 16px; margin-top: 4px; }
-    .blabel { font-size: 11px; font-weight: 700; text-transform: uppercase; }
+    .tree { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 18px; margin-top: 12px; }
+    .node { border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 12px; background: #fff; font-size: 13px; cursor: pointer; display: inline-block; }
+    .node:hover { border-color: #2563eb; }
+    .branch { margin-left: 26px; border-left: 2px solid #e5e7eb; padding-left: 16px; margin-top: 4px; }
+    .blabel { font-size: 10px; font-weight: 700; text-transform: uppercase; margin-top: 6px; }
     .ok { color: #059669; } .no { color: #dc2626; }
-    .bar { height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
-    .bar > div { height: 100%; background: #2563eb; }
+    .editor { margin: 6px 0 10px 0; padding: 10px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; max-width: 560px; }
+    .editor label { display: block; font-size: 11px; color: #6b7280; margin: 6px 0 2px; }
+    .editor textarea, .editor input { width: 100%; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; font-family: inherit; }
+    .editor button { margin-top: 8px; background: #2563eb; color: #fff; border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer; }
+    .hint { font-size: 11px; color: #9ca3af; }
+    iframe { width: 100%; height: 78vh; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; }
   </style>
 </head>
 <body>
-  <header>OpenOutreach — Dashboard</header>
+  <header>OpenOutreach — Grantgunner</header>
+  <nav id="nav"></nav>
   <div class="wrap">
-    <div class="kpis" id="kpis"></div>
-
-    <h2>Senders</h2>
-    <table id="senders"><thead><tr><th>Account</th><th>Active</th><th>InMail</th><th>Connect (used/cap)</th><th>Message</th></tr></thead><tbody></tbody></table>
-
-    <h2>Sequence flow <select id="seqpick"></select></h2>
-    <div class="tree" id="flow">Pick a sequence…</div>
+    <div class="tab active" id="tab-dashboard">
+      <div class="kpis" id="kpis"></div>
+      <h2>Senders</h2>
+      <table id="senders"><thead><tr><th>Account</th><th>Active</th><th>InMail</th><th>Connect</th><th>Message</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="tab" id="tab-flows">
+      <h2>Sequence flow <select id="seqpick"></select></h2>
+      <p class="hint">Click any step to edit its message. Use <code>{first_name}</code> — it becomes the lead's first name.</p>
+      <div class="tree" id="flow">Pick a sequence…</div>
+    </div>
+    <div class="tab" id="tab-unibox"><iframe data-src="/admin/linkedin/messagethread/"></iframe></div>
+    <div class="tab" id="tab-accounts"><iframe data-src="/admin/linkedin/linkedinprofile/"></iframe></div>
+    <div class="tab" id="tab-leads"><iframe data-src="/admin/linkedin/leadlist/"></iframe></div>
+    <div class="tab" id="tab-campaigns"><iframe data-src="/admin/linkedin/campaign/"></iframe></div>
   </div>
 
   <script>
-    const j = (u) => fetch(u).then(r => r.json());
-
-    const KPI_LABELS = {
-      connection_requests: "Connection Requests", messages_sent: "Messages Sent",
-      inmails_sent: "InMails Sent", replies: "Replies", active: "Active", completed: "Completed",
-    };
-    j("api/kpis/").then(d => {
-      document.getElementById("kpis").innerHTML = Object.entries(KPI_LABELS)
-        .map(([k, label]) => `<div class="kpi"><div class="label">${label}</div><div class="value">${d[k] ?? 0}</div></div>`).join("");
+    const j = (u, opts) => fetch(u, opts).then(r => r.json());
+    const TABS = [["dashboard","Dashboard"],["flows","Flows"],["unibox","Unibox"],["accounts","Accounts"],["leads","Leads"],["campaigns","Campaigns"]];
+    const nav = document.getElementById("nav");
+    TABS.forEach(([id, label], i) => {
+      const b = document.createElement("button");
+      b.textContent = label; b.className = i === 0 ? "active" : "";
+      b.onclick = () => showTab(id, b);
+      nav.appendChild(b);
     });
-
-    j("api/senders/").then(d => {
-      const cap = (u, k) => u[k] ? `${u[k].used}/${u[k].cap}` : "—";
-      document.querySelector("#senders tbody").innerHTML = d.senders.map(s => `
-        <tr><td>${s.username}</td>
-        <td class="${s.active ? "ok" : "no"}">${s.active ? "yes" : "no"}</td>
-        <td class="${s.has_inmail ? "ok" : "no"}">${s.has_inmail ? "yes" : "no"}</td>
-        <td>${cap(s.usage, "connect")}</td><td>${cap(s.usage, "message")}</td></tr>`).join("")
-        || `<tr><td colspan="5">No senders yet.</td></tr>`;
-    });
-
-    function renderNode(n) {
-      if (!n) return "";
-      const cfg = n.config && Object.keys(n.config).length ? ` <span style="color:#6b7280">(${JSON.stringify(n.config)})</span>` : "";
-      let html = `<div><span class="node">${n.step_type}${cfg}</span></div>`;
-      if (n.success.length) html += `<div class="branch"><div class="blabel ok">accepted / replied</div>${n.success.map(renderNode).join("")}</div>`;
-      if (n.failure.length) html += `<div class="branch"><div class="blabel no">not-accepted / no-reply</div>${n.failure.map(renderNode).join("")}</div>`;
-      return html;
+    function showTab(id, btn) {
+      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll("nav button").forEach(t => t.classList.remove("active"));
+      document.getElementById("tab-" + id).classList.add("active");
+      btn.classList.add("active");
+      const f = document.querySelector("#tab-" + id + " iframe");
+      if (f && !f.src) f.src = f.dataset.src;  // lazy-load admin pages
     }
 
+    const KPI = { connection_requests: "Connection Requests", messages_sent: "Messages Sent", inmails_sent: "InMails Sent", replies: "Replies", active: "Active", completed: "Completed" };
+    j("api/kpis/").then(d => {
+      document.getElementById("kpis").innerHTML = Object.entries(KPI).map(([k, l]) => `<div class="kpi"><div class="label">${l}</div><div class="value">${d[k] ?? 0}</div></div>`).join("");
+    });
+    j("api/senders/").then(d => {
+      const c = (u, k) => u[k] ? `${u[k].used}/${u[k].cap}` : "—";
+      document.querySelector("#senders tbody").innerHTML = d.senders.map(s =>
+        `<tr><td>${s.username}</td><td class="${s.active?"ok":"no"}">${s.active?"yes":"no"}</td><td class="${s.has_inmail?"ok":"no"}">${s.has_inmail?"yes":"no"}</td><td>${c(s.usage,"connect")}</td><td>${c(s.usage,"message")}</td></tr>`
+      ).join("") || `<tr><td colspan="5">No senders yet — add one in the Accounts tab.</td></tr>`;
+    });
+
+    // ---- Editable flow ----
+    const FIELDS = {
+      connect: [["personalised_note", "Connection note (not yet sent by LinkedIn lib)", "textarea"], ["wait_days_before_branch_decision", "Days to wait for acceptance", "number"]],
+      message: [["template", "Message", "textarea"]],
+      inmail: [["subject", "InMail subject", "input"], ["body", "InMail body", "textarea"]],
+      wait: [["days", "Wait days", "number"]],
+      profile_visit: [], like_post: [],
+    };
+    let CURRENT_SEQ = null;
+
+    function editor(n) {
+      const fields = FIELDS[n.step_type] || [];
+      if (!fields.length) return "";
+      const inputs = fields.map(([key, label, type]) => {
+        const val = (n.config && n.config[key] != null) ? n.config[key] : "";
+        const el = type === "textarea"
+          ? `<textarea rows="3" data-k="${key}">${String(val).replace(/</g,"&lt;")}</textarea>`
+          : `<input type="${type === "number" ? "number" : "text"}" data-k="${key}" value="${String(val).replace(/"/g,"&quot;")}">`;
+        return `<label>${label}</label>${el}`;
+      }).join("");
+      return `<div class="editor" data-step="${n.id}" style="display:none">${inputs}<button onclick="saveStep(${n.id}, ${JSON.stringify(n.step_type)})">Save</button></div>`;
+    }
+    function renderNode(n) {
+      let h = `<div><span class="node" onclick="toggleEd(${n.id})">${n.step_type}</span>${editor(n)}</div>`;
+      if (n.success.length) h += `<div class="branch"><div class="blabel ok">accepted / replied</div>${n.success.map(renderNode).join("")}</div>`;
+      if (n.failure.length) h += `<div class="branch"><div class="blabel no">not-accepted / no-reply</div>${n.failure.map(renderNode).join("")}</div>`;
+      return h;
+    }
+    window.toggleEd = (id) => { const e = document.querySelector(`.editor[data-step="${id}"]`); if (e) e.style.display = e.style.display === "none" ? "block" : "none"; };
+    window.saveStep = (id, stepType) => {
+      const ed = document.querySelector(`.editor[data-step="${id}"]`);
+      const cfg = {};
+      ed.querySelectorAll("[data-k]").forEach(el => {
+        let v = el.value;
+        if (el.type === "number") v = v === "" ? 0 : Number(v);
+        cfg[el.dataset.k] = v;
+      });
+      j(`api/step/${id}/`, { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ config: cfg }) })
+        .then(r => { if (r.ok) { ed.style.display = "none"; loadSeq(CURRENT_SEQ); } else alert(r.error || "save failed"); });
+    };
+    function loadSeq(id) {
+      CURRENT_SEQ = id;
+      if (!id) { document.getElementById("flow").textContent = "Pick a sequence…"; return; }
+      j(`api/sequence/${id}/`).then(seq => { document.getElementById("flow").innerHTML = seq.root ? renderNode(seq.root) : "Empty sequence."; });
+    }
     j("api/sequences/").then(d => {
       const sel = document.getElementById("seqpick");
       sel.innerHTML = `<option value="">—</option>` + d.sequences.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
-      sel.onchange = () => {
-        if (!sel.value) { document.getElementById("flow").textContent = "Pick a sequence…"; return; }
-        j(`api/sequence/${sel.value}/`).then(seq => {
-          document.getElementById("flow").innerHTML = seq.root ? renderNode(seq.root) : "Empty sequence.";
-        });
-      };
+      sel.onchange = () => loadSeq(sel.value);
+      if (d.sequences.length) { sel.value = d.sequences[0].id; loadSeq(d.sequences[0].id); }
     });
   </script>
 </body>

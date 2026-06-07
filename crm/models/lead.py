@@ -18,6 +18,9 @@ class Lead(models.Model):
     urn = models.CharField(max_length=200, null=True, blank=True, unique=True, db_index=True)
     embedding = models.BinaryField(null=True, blank=True)
     disqualified = models.BooleanField(default=False)
+    first_name = models.CharField(max_length=120, blank=True, default="")
+    last_name = models.CharField(max_length=120, blank=True, default="")
+    company = models.CharField(max_length=200, blank=True, default="")
     lead_list = models.ForeignKey(
         "linkedin.LeadList",
         null=True,

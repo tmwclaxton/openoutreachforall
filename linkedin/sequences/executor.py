@@ -226,12 +226,19 @@ def _log(session, state, step, action_type):
 
 
 def render_template(template: str, context: dict, fallback: str = "") -> str:
-    """Jinja render with an empty-result → fallback guard (HeyReach-style)."""
+    """Render a template against ``context``. Supports both HeyReach-style
+    ``{first_name}`` placeholders and Jinja ``{{ first_name }}``. Empty result
+    falls back to ``fallback``.
+    """
     if not template:
         return fallback
     try:
+        import re
+
+        # {var} (single brace, no spaces) → context value; leaves {{ }} for Jinja.
+        text = re.sub(r"\{(\w+)\}", lambda m: str(context.get(m.group(1), "")), template)
         from jinja2 import Template
-        rendered = Template(template).render(**context).strip()
+        rendered = Template(text).render(**context).strip()
     except Exception:
         return fallback
     return rendered or fallback
@@ -239,7 +246,12 @@ def render_template(template: str, context: dict, fallback: str = "") -> str:
 
 def _lead_context(state) -> dict:
     lead = state.lead
-    return {"public_identifier": lead.public_identifier, "first_name": ""}
+    return {
+        "first_name": lead.first_name or "",
+        "last_name": lead.last_name or "",
+        "company": lead.company or "",
+        "public_identifier": lead.public_identifier,
+    }
 
 
 # ── Browser-action wrappers (mocked in tests) ─────────────────────────
@@ -247,13 +259,15 @@ def _lead_context(state) -> dict:
 
 def send_connection_request(session, state, step):
     from linkedin_cli.actions.connect import send_connection_request as _send
+    from linkedin_cli.actions.status import get_connection_status
 
-    note = render_template(
-        step.config.get("personalised_note", ""),
-        _lead_context(state),
-        step.config.get("fallback_note", ""),
-    )
-    _send(session, state.lead.public_identifier, note=note)
+    lead = state.lead
+    pdict = {"public_identifier": lead.public_identifier, "url": lead.linkedin_url, "urn": lead.urn or ""}
+    # The connect verb assumes the profile page is already open; this navigates there.
+    get_connection_status(session, lead.public_identifier)
+    # NOTE: linkedin_cli's active connect flow sends WITHOUT a note; the
+    # personalised_note config is not yet wired (needs an app-side with-note flow).
+    _send(session, pdict)
 
 
 def is_connection_accepted(session, state) -> bool:
@@ -265,14 +279,17 @@ def is_connection_accepted(session, state) -> bool:
 
 
 def send_message(session, state, step):
-    from linkedin_cli.actions.message import send_message as _send
+    from linkedin_cli.actions.message import send_raw_message
 
+    lead = state.lead
     body = render_template(
         step.config.get("template", ""),
         _lead_context(state),
         step.config.get("fallback", ""),
     )
-    _send(session, state.lead.public_identifier, body)
+    urn = lead.urn or lead.get_urn(session)
+    pdict = {"public_identifier": lead.public_identifier, "url": lead.linkedin_url, "urn": urn}
+    send_raw_message(session, pdict, body)
 
 
 def send_inmail(session, state, step):

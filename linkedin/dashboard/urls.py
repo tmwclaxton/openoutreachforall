@@ -9,4 +9,5 @@ urlpatterns = [
     path("api/senders/", views.api_senders, name="dashboard_api_senders"),
     path("api/sequences/", views.api_sequences, name="dashboard_api_sequences"),
     path("api/sequence/<int:sequence_id>/", views.api_sequence, name="dashboard_api_sequence"),
+    path("api/step/<int:step_id>/", views.api_update_step, name="dashboard_api_update_step"),
 ]

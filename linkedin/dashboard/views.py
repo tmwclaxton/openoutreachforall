@@ -7,14 +7,40 @@ self-contained page (no SPA build pipeline).
 """
 from __future__ import annotations
 
+import json
+
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import JsonResponse
 from django.shortcuts import render
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 
 
 @staff_member_required
 def dashboard_page(request):
     return render(request, "dashboard/dashboard.html", {})
+
+
+@csrf_exempt
+@staff_member_required
+@require_POST
+def api_update_step(request, step_id):
+    """Edit a sequence step's config (the in-dashboard flow editor)."""
+    from linkedin.models import SequenceStep
+
+    step = SequenceStep.objects.filter(pk=step_id).first()
+    if not step:
+        return JsonResponse({"error": "not found"}, status=404)
+    try:
+        payload = json.loads(request.body or "{}")
+    except ValueError:
+        return JsonResponse({"error": "bad json"}, status=400)
+    new_config = payload.get("config")
+    if not isinstance(new_config, dict):
+        return JsonResponse({"error": "config must be an object"}, status=400)
+    step.config = new_config
+    step.save(update_fields=["config"])
+    return JsonResponse({"ok": True, "config": step.config})
 
 
 @staff_member_required

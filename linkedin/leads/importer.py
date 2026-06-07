@@ -67,6 +67,9 @@ def import_csv(lead_list, fileobj: IO[str]) -> dict:
             linkedin_url=public_id_to_url(public_id),
             public_identifier=public_id,
             lead_list=lead_list,
+            first_name=(row.get("first_name") or "").strip(),
+            last_name=(row.get("last_name") or "").strip(),
+            company=(row.get("company") or "").strip(),
         )
         created += 1
 
