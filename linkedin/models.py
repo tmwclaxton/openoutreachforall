@@ -124,6 +124,8 @@ class LeadList(models.Model):
         default=SourceType.MANUAL,
     )
     source_url = models.URLField(max_length=2000, null=True, blank=True)
+    # Set when a dashboard search list is created; the browser worker scrapes it.
+    pending_search = models.BooleanField(default=False)
     created_at = models.DateTimeField(default=timezone.now)
     archived_at = models.DateTimeField(null=True, blank=True)
 

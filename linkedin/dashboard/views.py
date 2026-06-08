@@ -45,6 +45,76 @@ def api_update_step(request, step_id):
     return JsonResponse({"ok": True, "config": step.config})
 
 
+@staff_member_required
+def api_leads(request):
+    from linkedin.models import LeadList
+
+    lists = []
+    for ll in LeadList.objects.filter(archived_at__isnull=True).order_by("-created_at"):
+        lists.append({"id": ll.pk, "name": ll.name, "source": ll.source_type, "count": ll.leads.count()})
+    return JsonResponse({"lists": lists})
+
+
+@csrf_exempt
+@staff_member_required
+@require_POST
+def api_leads_csv(request):
+    from linkedin.leads import importer
+    from linkedin.models import LeadList
+
+    payload = json.loads(request.body or "{}")
+    name = (payload.get("name") or "CSV import").strip()
+    csv_text = payload.get("csv_text") or ""
+    ll = importer.create_lead_list(name=name, owner=request.user, source_type=LeadList.SourceType.CSV)
+    try:
+        result = importer.import_csv(ll, iter(csv_text.splitlines()))
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    return JsonResponse({"ok": True, "list_id": ll.pk, **result})
+
+
+@csrf_exempt
+@staff_member_required
+@require_POST
+def api_leads_search(request):
+    """Queue a LinkedIn people search (URL or keyword). The browser worker
+    scrapes it on its next cycle (one process owns the LinkedIn session).
+    """
+    from linkedin.leads import importer
+    from linkedin.models import LeadList
+
+    payload = json.loads(request.body or "{}")
+    name = (payload.get("name") or "Search import").strip()
+    query = (payload.get("query") or "").strip()
+    if not query:
+        return JsonResponse({"error": "query required"}, status=400)
+    url = query if query.startswith("http") else (
+        "https://www.linkedin.com/search/results/people/?keywords=" + quote(query)
+    )
+    ll = importer.create_lead_list(
+        name=name, owner=request.user, source_type=LeadList.SourceType.SEARCH_URL, source_url=url,
+    )
+    ll.pending_search = True
+    ll.save(update_fields=["pending_search"])
+    return JsonResponse({"ok": True, "queued": True, "list_id": ll.pk})
+
+
+@staff_member_required
+def api_leadlist_export(request, list_id):
+    from linkedin.models import LeadList
+
+    ll = LeadList.objects.filter(pk=list_id).first()
+    if not ll:
+        return JsonResponse({"error": "not found"}, status=404)
+    resp = HttpResponse(content_type="text/csv")
+    resp["Content-Disposition"] = f'attachment; filename="leads-{ll.pk}.csv"'
+    w = _csv.writer(resp)
+    w.writerow(["linkedin_url", "public_identifier", "first_name", "last_name", "company"])
+    for lead in ll.leads.all():
+        w.writerow([lead.linkedin_url, lead.public_identifier, lead.first_name, lead.last_name, lead.company])
+    return resp
+
+
 @csrf_exempt
 @staff_member_required
 @require_POST

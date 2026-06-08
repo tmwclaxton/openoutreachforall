@@ -152,3 +152,24 @@ def import_search_url(session, lead_list, url: str, cap: int = SEARCH_IMPORT_CAP
         "Search import into %s: created=%d (scraped=%d)", lead_list, created, len(scraped),
     )
     return {"created": created, "scraped": len(scraped)}
+
+
+def process_pending_searches(session, cap: int = SEARCH_IMPORT_CAP) -> list:
+    """Scrape any lead lists queued via the dashboard search box. Clears the
+    ``pending_search`` flag whether or not the scrape succeeds. Returns
+    ``[(list_id, created), ...]``.
+    """
+    from linkedin.models import LeadList
+
+    results = []
+    for ll in LeadList.objects.filter(pending_search=True, archived_at__isnull=True):
+        try:
+            r = import_search_url(session, ll, ll.source_url or "", cap=cap)
+            results.append((ll.pk, r.get("created", 0)))
+        except Exception:
+            logger.exception("Pending search failed for list %s", ll.pk)
+            results.append((ll.pk, 0))
+        finally:
+            ll.pending_search = False
+            ll.save(update_fields=["pending_search"])
+    return results

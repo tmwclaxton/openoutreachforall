@@ -12,4 +12,8 @@ urlpatterns = [
     path("api/step/<int:step_id>/", views.api_update_step, name="dashboard_api_update_step"),
     path("api/sequences/create/", views.api_create_sequence, name="dashboard_api_create_sequence"),
     path("api/sequence/<int:sequence_id>/step/", views.api_create_step, name="dashboard_api_create_step"),
+    path("api/leads/", views.api_leads, name="dashboard_api_leads"),
+    path("api/leads/csv/", views.api_leads_csv, name="dashboard_api_leads_csv"),
+    path("api/leads/search/", views.api_leads_search, name="dashboard_api_leads_search"),
+    path("api/leadlist/<int:list_id>/export/", views.api_leadlist_export, name="dashboard_api_leadlist_export"),
 ]

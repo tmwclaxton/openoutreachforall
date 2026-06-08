@@ -61,7 +61,24 @@
 
     <div class="tab" id="tab-unibox"><iframe data-src="/admin/linkedin/messagethread/"></iframe></div>
     <div class="tab" id="tab-accounts"><iframe data-src="/admin/linkedin/linkedinprofile/"></iframe></div>
-    <div class="tab" id="tab-leads"><iframe data-src="/admin/linkedin/leadlist/"></iframe></div>
+    <div class="tab" id="tab-leads">
+      <h2>Add leads from CSV</h2>
+      <div class="editor" style="max-width:680px">
+        <label>List name</label><input id="csvname" placeholder="e.g. Q3 Founders">
+        <label>CSV rows — header line then rows (columns: linkedin_url, first_name, last_name, company)</label>
+        <textarea id="csvtext" rows="5" placeholder="linkedin_url,first_name&#10;https://www.linkedin.com/in/someone/,Jane"></textarea>
+        <button onclick="importCsv()">Import CSV</button>
+      </div>
+      <h2>Add leads from a LinkedIn search</h2>
+      <div class="editor" style="max-width:680px">
+        <label>List name</label><input id="searchname" placeholder="e.g. London CTOs">
+        <label>Search URL or keywords</label><input id="searchq" placeholder="paste a people-search URL, or type keywords">
+        <button id="searchbtn" onclick="runSearch()">Run search &amp; import</button>
+        <div class="hint">Scrapes LinkedIn live (up to ~1 min). Results become a lead list you can attach to a campaign.</div>
+      </div>
+      <h2>Lead lists <span class="hint">(attach one to a campaign in the Campaigns tab)</span></h2>
+      <table id="leadlists"><thead><tr><th>Name</th><th>Source</th><th>Leads</th><th>Export</th></tr></thead><tbody></tbody></table>
+    </div>
     <div class="tab" id="tab-campaigns"><iframe data-src="/admin/linkedin/campaign/"></iframe></div>
   </div>
 
@@ -75,7 +92,30 @@
       document.querySelectorAll("nav button").forEach(t => t.classList.remove("active"));
       document.getElementById("tab-"+id).classList.add("active"); btn.classList.add("active");
       const f = document.querySelector("#tab-"+id+" iframe"); if (f && !f.src) f.src = f.dataset.src;
+      if (id === "leads") loadLeads();
     }
+
+    function loadLeads(){
+      j("api/leads/").then(d => {
+        document.querySelector("#leadlists tbody").innerHTML = d.lists.map(l =>
+          `<tr><td>${l.name}</td><td>${l.source}</td><td>${l.count}</td><td><a href="api/leadlist/${l.id}/export/">Export CSV</a></td></tr>`
+        ).join("") || `<tr><td colspan="4">No lists yet.</td></tr>`;
+      });
+    }
+    window.importCsv = () => {
+      const name = document.getElementById("csvname").value;
+      const csv_text = document.getElementById("csvtext").value;
+      j("api/leads/csv/", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({name, csv_text})})
+        .then(r => { if(r.ok){ alert(`Imported: ${r.created} created, ${r.skipped} skipped, ${r.invalid} invalid`); loadLeads(); } else alert(r.error||"failed"); });
+    };
+    window.runSearch = () => {
+      const name = document.getElementById("searchname").value;
+      const query = document.getElementById("searchq").value;
+      if(!query){ alert("Enter a search URL or keywords"); return; }
+      const btn = document.getElementById("searchbtn"); btn.textContent = "Searching… (up to ~1 min)"; btn.disabled = true;
+      j("api/leads/search/", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({name, query})})
+        .then(r => { btn.textContent = "Run search & import"; btn.disabled = false; if(r.ok){ alert(`Imported ${r.created} new leads (scraped ${r.scraped})`); loadLeads(); } else alert(r.error||"search failed"); });
+    };
 
     const KPI = { connection_requests:"Connection Requests", messages_sent:"Messages Sent", inmails_sent:"InMails Sent", replies:"Replies", active:"Active", completed:"Completed" };
     j("api/kpis/").then(d => { document.getElementById("kpis").innerHTML = Object.entries(KPI).map(([k,l]) => `<div class="kpi"><div class="label">${l}</div><div class="value">${d[k]??0}</div></div>`).join(""); });

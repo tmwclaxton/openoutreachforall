@@ -71,6 +71,36 @@ class TestDashboardApi:
         assert resp.status_code == 200
         assert b"Dashboard" in resp.content
 
+    def test_leads_csv_import_and_export(self, admin_client):
+        import json
+
+        from crm.models import Lead
+
+        csv_text = "linkedin_url,first_name\nhttps://www.linkedin.com/in/jane/,Jane\nhttps://www.linkedin.com/in/bob/,Bob"
+        r = admin_client.post(
+            "/dashboard/api/leads/csv/", data=json.dumps({"name": "L", "csv_text": csv_text}),
+            content_type="application/json",
+        ).json()
+        assert r["created"] == 2
+        assert Lead.objects.filter(lead_list_id=r["list_id"], first_name="Jane").exists()
+        exp = admin_client.get(f"/dashboard/api/leadlist/{r['list_id']}/export/")
+        assert exp.status_code == 200
+        assert b"jane" in exp.content.lower()
+
+    def test_leads_search_queues(self, admin_client):
+        import json
+
+        from linkedin.models import LeadList
+
+        r = admin_client.post(
+            "/dashboard/api/leads/search/", data=json.dumps({"name": "S", "query": "fintech founder"}),
+            content_type="application/json",
+        ).json()
+        assert r["queued"] is True
+        ll = LeadList.objects.get(pk=r["list_id"])
+        assert ll.pending_search is True
+        assert "keywords=fintech" in ll.source_url
+
     def test_requires_staff(self, client, db):
         resp = client.get("/dashboard/api/kpis/")
         assert resp.status_code in (302, 403)
