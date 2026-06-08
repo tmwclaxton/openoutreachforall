@@ -1,6 +1,7 @@
 # linkedin/conf.py
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from linkedin.tz_detect import system_timezone
@@ -15,7 +16,9 @@ PROMPTS_DIR = Path(__file__).parent / "templates" / "prompts"
 
 DIAGNOSTICS_DIR = Path("/tmp/openoutreach-diagnostics")
 
-FASTEMBED_CACHE_DIR = ROOT_DIR / ".cache" / "fastembed"
+# Override via env so deployments can point at a writable volume (the repo
+# mount is read-only for the container user).
+FASTEMBED_CACHE_DIR = Path(os.environ.get("FASTEMBED_CACHE_DIR", str(ROOT_DIR / ".cache" / "fastembed")))
 
 MIN_DELAY = 5
 MAX_DELAY = 8
