@@ -222,6 +222,11 @@ class LinkedInProfile(models.Model):
     send_weekdays = models.JSONField(default=default_send_weekdays, blank=True)  # Mon=0…Sun=6
     skip_bank_holidays = models.BooleanField(default=False)
     holiday_country = models.CharField(max_length=8, default="GB")
+    # Randomise the day's connection-request cap within [min, max] instead of a
+    # fixed number, so daily volume varies (more human). Stable per (account, day).
+    connect_random_enabled = models.BooleanField(default=False)
+    connect_random_min = models.PositiveSmallIntegerField(default=19)
+    connect_random_max = models.PositiveSmallIntegerField(default=25)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

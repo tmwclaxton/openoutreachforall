@@ -249,7 +249,7 @@ def _lead_name(lead):
 
 @staff_member_required
 def api_accounts(request):
-    from linkedin.accounts.limits import daily_count, inmail_sent_this_month
+    from linkedin.accounts.limits import cap_for, daily_count, inmail_sent_this_month
     from linkedin.models import LinkedInProfile
 
     out = []
@@ -264,6 +264,9 @@ def api_accounts(request):
             "send_start_hour": a.send_start_hour, "send_end_hour": a.send_end_hour,
             "send_timezone": a.send_timezone, "send_weekdays": a.send_weekdays or [0, 1, 2, 3, 4],
             "skip_bank_holidays": a.skip_bank_holidays, "holiday_country": a.holiday_country,
+            "connect_random_enabled": a.connect_random_enabled,
+            "connect_random_min": a.connect_random_min, "connect_random_max": a.connect_random_max,
+            "connect_today": cap_for(a, "connect"),  # today's effective cap (random or fixed)
         })
     return JsonResponse({"accounts": out})
 
@@ -333,6 +336,12 @@ def api_account_update(request, account_id):
         prof.skip_bank_holidays = bool(payload["skip_bank_holidays"])
     if payload.get("holiday_country"):
         prof.holiday_country = str(payload["holiday_country"])[:8].upper()
+    if "connect_random_enabled" in payload:
+        prof.connect_random_enabled = bool(payload["connect_random_enabled"])
+    if payload.get("connect_random_min") is not None:
+        prof.connect_random_min = max(0, int(payload["connect_random_min"]))
+    if payload.get("connect_random_max") is not None:
+        prof.connect_random_max = max(0, int(payload["connect_random_max"]))
     prof.save()
     return JsonResponse({"ok": True})
 

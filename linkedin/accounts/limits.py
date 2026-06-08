@@ -17,8 +17,22 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 
-def cap_for(account, action_type) -> int:
+def cap_for(account, action_type, date=None) -> int:
     from linkedin.models import default_daily_caps
+
+    # Connection requests can use a randomised daily cap within [min, max], picked
+    # deterministically per (account, day) so it's stable across the day / restarts.
+    if action_type == "connect" and getattr(account, "connect_random_enabled", False):
+        import random as _random
+
+        lo = int(account.connect_random_min or 0)
+        hi = int(account.connect_random_max or 0)
+        if hi < lo:
+            lo, hi = hi, lo
+        if hi > 0:
+            d = date or timezone.now().date()
+            seed = account.pk * 1_000_000 + d.toordinal()  # stable, not process-salted
+            return _random.Random(seed).randint(lo, hi)
 
     caps = account.daily_caps_json or default_daily_caps()
     return int(caps.get(action_type, 0))
