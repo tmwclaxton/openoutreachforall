@@ -24,6 +24,7 @@ urlpatterns = [
     path("api/leads/<int:list_id>/continue/", views.api_leads_continue, name="dashboard_api_leads_continue"),
     path("api/inbox/thread/<int:thread_id>/send/", views.api_inbox_send, name="dashboard_api_inbox_send"),
     path("api/leadlist/<int:list_id>/export/", views.api_leadlist_export, name="dashboard_api_leadlist_export"),
+    path("api/leadlist/<int:list_id>/events/", views.api_leadlist_events, name="dashboard_api_leadlist_events"),
     path("api/accounts/", views.api_accounts, name="dashboard_api_accounts"),
     path("api/accounts/add/", views.api_account_add, name="dashboard_api_account_add"),
     path("api/account/<int:account_id>/", views.api_account_update, name="dashboard_api_account_update"),

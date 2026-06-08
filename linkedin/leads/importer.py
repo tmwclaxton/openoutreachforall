@@ -22,6 +22,15 @@ SEARCH_IMPORT_CAP = 1000
 CSV_REQUIRED_COLUMN = "linkedin_url"
 
 
+def log_event(lead_list, role, text, **meta):
+    """Append one entry to a lead list's activity thread (the "AI chat")."""
+    from linkedin.models import LeadListEvent
+
+    return LeadListEvent.objects.create(
+        lead_list=lead_list, role=role, text=text, meta=meta or {},
+    )
+
+
 def create_lead_list(name, owner, source_type, source_url=None):
     """Create and return a new LeadList."""
     from linkedin.models import LeadList
@@ -151,6 +160,13 @@ def import_search_url(session, lead_list, url: str, cap: int = SEARCH_IMPORT_CAP
     logger.info(
         "Search import into %s: created=%d (scraped=%d)", lead_list, created, len(scraped),
     )
+    log_event(
+        lead_list, "system",
+        f"Scraped the saved LinkedIn search ({len(scraped)} profiles) and added "
+        f"{created} new lead{'s' if created != 1 else ''} "
+        f"({lead_list.leads.count()} in the list so far).",
+        created=created, scraped=len(scraped),
+    )
     return {"created": created, "scraped": len(scraped)}
 
 
@@ -185,6 +201,15 @@ def import_ai_search(session, lead_list, prompt: str, cap: int = 30, max_keyword
                 created += 1
 
     logger.info("AI search into %s: created=%d keywords=%s", lead_list, created, keywords)
+    if keywords:
+        kw = ", ".join(keywords)
+        summary = (
+            f"Searched LinkedIn for: {kw}.\nAdded {created} new lead{'s' if created != 1 else ''}"
+            f" ({lead_list.leads.count()} in the list so far)."
+            if created else
+            f"Searched LinkedIn for: {kw}.\nNo new leads this pass — this search looks exhausted."
+        )
+        log_event(lead_list, "ai", summary, keywords=keywords, created=created)
     return {"created": created, "keywords": keywords}
 
 

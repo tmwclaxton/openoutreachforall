@@ -533,6 +533,8 @@ def api_leads_ai(request):
     ll.target_count = int(payload.get("target_count") or 30)
     ll.pending_search = True
     ll.save(update_fields=["pending_search", "target_count"])
+    importer.log_event(ll, "user", prompt)
+    importer.log_event(ll, "system", f"Target set to {ll.target_count} leads. The worker will start finding them shortly.")
     return JsonResponse({"ok": True, "queued": True, "list_id": ll.pk})
 
 
@@ -542,6 +544,7 @@ def api_leads_ai(request):
 def api_leads_continue(request, list_id):
     """Keep building a lead list: optionally refine the prompt ("these aren't
     right, here's why…") and/or raise the target (e.g. 1000 not 30)."""
+    from linkedin.leads import importer
     from linkedin.models import LeadList
 
     ll = LeadList.objects.filter(pk=list_id).first()
@@ -558,7 +561,33 @@ def api_leads_continue(request, list_id):
         ll.target_count = max(ll.target_count, ll.leads.count() + 30)
     ll.pending_search = True
     ll.save()
+    if new_prompt:
+        importer.log_event(ll, "user", new_prompt)
+    importer.log_event(ll, "system", f"Continuing — target raised to {ll.target_count} leads.")
     return JsonResponse({"ok": True, "target": ll.target_count})
+
+
+@staff_member_required
+def api_leadlist_events(request, list_id):
+    """The lead list's activity thread (the "AI chat"): your prompts and what
+    the finder did each run, newest last."""
+    from django.utils import timezone as _tz
+
+    from linkedin.models import LeadList
+
+    ll = LeadList.objects.filter(pk=list_id).first()
+    if not ll:
+        return JsonResponse({"error": "not found"}, status=404)
+
+    def when(dt):
+        d = _tz.localtime(dt)
+        return d.strftime("%-d %b %H:%M")
+
+    events = [
+        {"role": e.role, "text": e.text, "meta": e.meta, "at": when(e.created_at)}
+        for e in ll.events.all()
+    ]
+    return JsonResponse({"name": ll.name, "source": ll.source_type, "events": events})
 
 
 @csrf_exempt

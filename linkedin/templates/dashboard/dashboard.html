@@ -54,6 +54,20 @@
     .bchip.yes { background: #dcfce7; color: #166534; } .bchip.no { background: #fee2e2; color: #991b1b; } .bchip.neutral { background: #e0e7ff; color: #3730a3; }
     .tend { display: inline-block; font-size: 12px; font-weight: 600; color: #64748b; padding: 5px 12px; }
     .addrow { margin-top: 8px; }
+    .modal-bg { display: none; position: fixed; inset: 0; background: rgba(17,24,39,.55); z-index: 50; align-items: center; justify-content: center; }
+    .modal-bg.open { display: flex; }
+    .modal { background: #fff; border-radius: 12px; width: 560px; max-width: 92vw; max-height: 84vh; display: flex; flex-direction: column; overflow: hidden; }
+    .modal .mhead { padding: 14px 18px; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; justify-content: space-between; }
+    .modal .mhead b { font-size: 15px; } .modal .mhead .x { cursor: pointer; color: #6b7280; font-size: 20px; line-height: 1; }
+    .modal .mbody { padding: 16px 18px; overflow-y: auto; background: #f8fafc; }
+    .chatrow { display: flex; margin-bottom: 12px; } .chatrow.user { justify-content: flex-end; }
+    .bubble { max-width: 78%; padding: 9px 13px; border-radius: 14px; font-size: 13px; line-height: 1.4; white-space: pre-wrap; }
+    .chatrow.user .bubble { background: #2563eb; color: #fff; border-bottom-right-radius: 4px; }
+    .chatrow.ai .bubble { background: #fff; border: 1px solid #e5e7eb; border-bottom-left-radius: 4px; }
+    .chatrow.system { justify-content: center; }
+    .chatrow.system .bubble { background: transparent; color: #94a3b8; font-size: 11px; max-width: 100%; text-align: center; padding: 2px; }
+    .chatmeta { font-size: 10px; color: #9ca3af; margin-top: 3px; }
+    .chatrow.user .chatmeta { text-align: right; }
     .addbtn { font-size: 12px; border: 1px dashed #9ca3af; background: #f9fafb; color: #374151; border-radius: 7px; padding: 4px 10px; cursor: pointer; margin: 6px 8px 0 0; }
     .addbtn.yes { border-color: #059669; color: #059669; } .addbtn.no { border-color: #dc2626; color: #dc2626; }
     .editor { margin: 6px 0 4px; padding: 10px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; max-width: 560px; }
@@ -216,6 +230,13 @@
         <textarea id="ctxbox" rows="14" style="width:100%"></textarea>
         <div><button id="ctxbtn" onclick="saveContext()">Save context</button> <span id="ctxsaved" class="hint"></span></div>
       </div>
+    </div>
+  </div>
+
+  <div class="modal-bg" id="chatbg" onclick="if(event.target===this)closeChat()">
+    <div class="modal">
+      <div class="mhead"><b id="chattitle">AI chat</b><span class="x" onclick="closeChat()">×</span></div>
+      <div class="mbody" id="chatbody"></div>
     </div>
   </div>
 
@@ -396,7 +417,7 @@
           `<tr><td>${l.name}</td><td>${l.source}</td><td>${l.count}</td>` +
           `<td>${l.target}${l.pending?' <span class="hint">⏳ finding…</span>':''}</td>` +
           `<td><a href="api/leadlist/${l.id}/export/">Export CSV</a></td>` +
-          `<td><button onclick="continueList(${l.id}, '${(l.name||'').replace(/'/g,"\\'")}', ${l.target})">Continue / refine</button></td>` +
+          `<td><button onclick="continueList(${l.id}, '${(l.name||'').replace(/'/g,"\\'")}', ${l.target})">Continue / refine</button> <button onclick="openChat(${l.id})">💬 AI chat</button></td>` +
           `<td><select id="ll2c_${l.id}">${campOpts}</select> <button onclick="addListToCampaign(${l.id})">Add</button></td></tr>`
         ).join("") || `<tr><td colspan="7">No lists yet.</td></tr>`;
       });
@@ -407,6 +428,25 @@
       j(`api/campaign/${campId}/add-leads/`, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({list_id: listId})})
         .then(r => { if(r.ok) alert(`Added ${r.enrolled} leads (${r.skipped_duplicate} skipped — already in a campaign).`); else alert(r.error||"failed"); });
     };
+    window.openChat = (listId) => {
+      const bg = document.getElementById("chatbg"); bg.classList.add("open");
+      document.getElementById("chatbody").innerHTML = `<div class="hint">Loading…</div>`;
+      j(`api/leadlist/${listId}/events/`).then(d => {
+        document.getElementById("chattitle").textContent = "AI chat — " + d.name;
+        const body = document.getElementById("chatbody");
+        if (!d.events.length){ body.innerHTML = `<div class="hint">Nothing here yet. For AI lists this fills with your prompt and what the finder did each run.</div>`; return; }
+        body.innerHTML = d.events.map(e => `
+          <div class="chatrow ${e.role}">
+            <div>
+              <div class="bubble">${esc(e.text)}</div>
+              ${e.role==="system" ? "" : `<div class="chatmeta">${e.role==="user"?"You":"AI"} · ${e.at}</div>`}
+            </div>
+          </div>`).join("");
+        body.scrollTop = body.scrollHeight;
+      });
+    };
+    window.closeChat = () => document.getElementById("chatbg").classList.remove("open");
+    document.addEventListener("keydown", e => { if(e.key==="Escape") closeChat(); });
     window.continueList = (id, name, target) => {
       const refine = prompt(`Continue "${name}".\n\nRefine the search (optional — e.g. "these aren't right because…"), or leave blank:`);
       if (refine === null) return;  // cancelled

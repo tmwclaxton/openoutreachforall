@@ -153,6 +153,31 @@ class LeadList(models.Model):
             self.save(update_fields=["archived_at"])
 
 
+class LeadListEvent(models.Model):
+    """One entry in a lead list's activity thread — the "AI chat": the user's
+    prompts/refinements and what the finder did each run (keywords, leads added).
+    Append-only; never edited or deleted (it's the record of what happened).
+    """
+
+    class Role(models.TextChoices):
+        USER = "user", "You"
+        AI = "ai", "AI"
+        SYSTEM = "system", "System"
+
+    lead_list = models.ForeignKey(LeadList, on_delete=models.CASCADE, related_name="events")
+    role = models.CharField(max_length=10, choices=Role.choices)
+    text = models.TextField(blank=True, default="")
+    meta = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        app_label = "linkedin"
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.role}:{self.text[:40]}"
+
+
 class LinkedInProfile(models.Model):
     user = models.OneToOneField(
         User,
