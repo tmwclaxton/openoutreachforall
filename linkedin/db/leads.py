@@ -48,6 +48,8 @@ def create_enriched_lead(session, url: str, profile: Dict[str, Any], lead_list=N
             return None
         lead = Lead.objects.create(
             linkedin_url=clean_url, public_identifier=public_id, lead_list=lead_list,
+            first_name=profile.get("first_name", "") or "",
+            last_name=profile.get("last_name", "") or "",
         )
         _cache_urn_from_profile(lead, profile)
 
