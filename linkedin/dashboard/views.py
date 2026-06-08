@@ -267,7 +267,7 @@ def api_create_step(request, sequence_id):
 
 @staff_member_required
 def api_kpis(request):
-    from linkedin.models import ActionLog, LeadCampaignState
+    from linkedin.models import ActionLog, LeadCampaignState, MessageThread
 
     State = LeadCampaignState.State
 
@@ -281,7 +281,8 @@ def api_kpis(request):
         "connection_requests": actions("connect"),
         "messages_sent": actions("message"),
         "inmails_sent": actions("inmail"),
-        "replies": states(State.STOPPED_REPLY),
+        # Conversations with at least one inbound message from the lead.
+        "replies": MessageThread.objects.filter(messages__direction="in").distinct().count(),
         "active": states(State.ACTIVE),
         "completed": states(State.COMPLETED),
     })
