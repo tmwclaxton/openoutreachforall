@@ -42,6 +42,11 @@ ACTIVE_START_HOUR = 9   # inclusive, local time
 ACTIVE_END_HOUR = 19    # exclusive, local time
 ACTIVE_TIMEZONE = system_timezone()
 
+# Drip each account's daily action budget evenly across the active window (with
+# mild jitter) instead of bursting — so e.g. 25 connects/day go out ~one every
+# ~24 min over a 10h day. Disabled in unit tests for deterministic execution.
+ENABLE_ACTION_PACING = True
+
 # ----------------------------------------------------------------------
 # Planner cap for check_pending: at most this many lazy slots per 24h
 # planning window, regardless of how many PENDING deals are overdue.

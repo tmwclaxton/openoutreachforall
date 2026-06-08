@@ -21,6 +21,10 @@ def default_daily_caps():
     return {"connect": 25, "message": 50, "inmail": 5, "profile_visit": 100, "like_post": 100, "follow_up": 50}
 
 
+def default_send_weekdays():
+    return [0, 1, 2, 3, 4]  # Mon–Fri (Python weekday(): Mon=0 … Sun=6)
+
+
 class SiteConfig(models.Model):
     """Singleton model for global site configuration (LLM keys, etc.)."""
 
@@ -210,6 +214,14 @@ class LinkedInProfile(models.Model):
     # Base32 TOTP secret for native 2FA (Google Authenticator). Sensitive — when
     # set, login auto-fills the 6-digit code instead of waiting for a human.
     totp_secret = models.CharField(max_length=128, blank=True, default="")
+    # Per-account sending schedule: messages/connects/etc. only go out inside this
+    # local window, on these weekdays, optionally skipping bank holidays.
+    send_start_hour = models.PositiveSmallIntegerField(default=9)   # inclusive, local
+    send_end_hour = models.PositiveSmallIntegerField(default=17)    # exclusive, local
+    send_timezone = models.CharField(max_length=64, default="Europe/London")
+    send_weekdays = models.JSONField(default=default_send_weekdays, blank=True)  # Mon=0…Sun=6
+    skip_bank_holidays = models.BooleanField(default=False)
+    holiday_country = models.CharField(max_length=8, default="GB")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -358,6 +370,7 @@ class SequenceStep(models.Model):
         PROFILE_VISIT = "profile_visit", "View Profile"
         LIKE_POST = "like_post", "Like Post"
         END = "end", "End — stop here"
+        BLANK = "blank", "Blank — no action (resume)"
 
     sequence = models.ForeignKey(Sequence, on_delete=models.CASCADE, related_name="steps")
     parent = models.ForeignKey(

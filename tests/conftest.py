@@ -19,6 +19,20 @@ def _ensure_crm_data(db):
 
 
 @pytest.fixture(autouse=True)
+def _disable_action_pacing():
+    """Pacing drips actions across the working day (real time); unit tests run
+    many actions back-to-back, so turn it off for deterministic execution."""
+    import linkedin.conf as conf
+
+    original = conf.ENABLE_ACTION_PACING
+    conf.ENABLE_ACTION_PACING = False
+    try:
+        yield
+    finally:
+        conf.ENABLE_ACTION_PACING = original
+
+
+@pytest.fixture(autouse=True)
 def _mock_embeddings(request):
     """Stub fastembed so tests don't need the ONNX model."""
     if "no_embed_mock" in request.keywords:

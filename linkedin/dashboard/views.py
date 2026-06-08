@@ -237,6 +237,9 @@ def api_accounts(request):
             "inmail_monthly_cap": a.inmail_monthly_cap, "inmail_used_month": inmail_sent_this_month(a),
             "connect_cap": caps.get("connect", 25), "message_cap": caps.get("message", 50),
             "connect_used": daily_count(a, "connect"), "message_used": daily_count(a, "message"),
+            "send_start_hour": a.send_start_hour, "send_end_hour": a.send_end_hour,
+            "send_timezone": a.send_timezone, "send_weekdays": a.send_weekdays or [0, 1, 2, 3, 4],
+            "skip_bank_holidays": a.skip_bank_holidays, "holiday_country": a.holiday_country,
         })
     return JsonResponse({"accounts": out})
 
@@ -293,6 +296,19 @@ def api_account_update(request, account_id):
     if payload.get("message_cap") is not None:
         caps["message"] = int(payload["message_cap"])
     prof.daily_caps_json = caps
+    # Per-account send schedule.
+    if payload.get("send_start_hour") is not None:
+        prof.send_start_hour = max(0, min(23, int(payload["send_start_hour"])))
+    if payload.get("send_end_hour") is not None:
+        prof.send_end_hour = max(1, min(24, int(payload["send_end_hour"])))
+    if payload.get("send_timezone"):
+        prof.send_timezone = str(payload["send_timezone"])[:64]
+    if isinstance(payload.get("send_weekdays"), list):
+        prof.send_weekdays = [int(d) for d in payload["send_weekdays"] if 0 <= int(d) <= 6]
+    if "skip_bank_holidays" in payload:
+        prof.skip_bank_holidays = bool(payload["skip_bank_holidays"])
+    if payload.get("holiday_country"):
+        prof.holiday_country = str(payload["holiday_country"])[:8].upper()
     prof.save()
     return JsonResponse({"ok": True})
 
@@ -481,11 +497,17 @@ def api_inbox_threads(request):
         base = base.filter(messages__direction="in")
     elif f == "sent":
         base = base.filter(messages__direction="out").exclude(messages__direction="in")
+    if account:
+        base = base.filter(account_id=account)
+    campaign = request.GET.get("campaign")
+    if campaign:
+        base = base.filter(lead__campaign_states__campaign_id=campaign)
+    lead_list = request.GET.get("lead_list")
+    if lead_list:
+        base = base.filter(lead__lead_list_id=lead_list)
     qs = (
         base.distinct().select_related("lead", "account").order_by("-last_message_at", "-created_at")
     )
-    if account:
-        qs = qs.filter(account_id=account)
 
     threads = []
     for t in qs[:300]:
@@ -759,6 +781,7 @@ _STEP_DEFAULTS = {
     "profile_visit": {},
     "like_post": {},
     "end": {},
+    "blank": {},
 }
 
 

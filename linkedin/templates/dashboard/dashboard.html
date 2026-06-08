@@ -27,6 +27,7 @@
     #camps button, #leadlists button { font-size: 12px; background: #fff; border: 1px solid #d1d5db; color: #374151; padding: 4px 9px; border-radius: 6px; cursor: pointer; margin-right: 4px; }
     #camps button.no, #leadlists button.no { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
     #camps select, #leadlists select { font-size: 12px; padding: 3px 6px; border: 1px solid #d1d5db; border-radius: 6px; }
+    #accts tr.schedrow td { background: #f8fafc; color: #374151; }
     h2 { font-size: 15px; margin-top: 24px; }
     table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; }
     th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid #f1f5f9; font-size: 13px; } th { background: #f9fafb; color: #6b7280; }
@@ -157,7 +158,7 @@
     </div>
 
     <div class="tab" id="tab-unibox">
-      <div class="bar"><b>Unibox</b> &nbsp; <label>Account:</label> <select id="inboxacct"><option value="">All accounts</option></select> &nbsp; <label>Show:</label> <select id="inboxfilter"><option value="replied">Replied</option><option value="sent">Sent (no reply yet)</option><option value="all">All conversations</option></select></div>
+      <div class="bar"><b>Unibox</b> &nbsp; <label>Account:</label> <select id="inboxacct"><option value="">All accounts</option></select> &nbsp; <label>Campaign:</label> <select id="inboxcamp"><option value="">All campaigns</option></select> &nbsp; <label>Lead list:</label> <select id="inboxlist"><option value="">All lists</option></select> &nbsp; <label>Show:</label> <select id="inboxfilter"><option value="replied">Replied</option><option value="sent">Sent (no reply yet)</option><option value="all">All conversations</option></select></div>
       <div class="inbox">
         <div class="threadlist" id="threadlist"></div>
         <div class="convo" id="convo"><div class="hint" style="padding:24px">Select a conversation…</div></div>
@@ -319,9 +320,13 @@
       if (id !== "flows") document.getElementById("phelp-panel").classList.remove("open");
     }
 
+    const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
     function loadAccounts(){
       j("api/accounts/").then(d => {
-        document.querySelector("#accts tbody").innerHTML = d.accounts.map(a => `<tr>
+        document.querySelector("#accts tbody").innerHTML = d.accounts.map(a => {
+          const wd = a.send_weekdays || [0,1,2,3,4];
+          const days = DAYS.map((lbl,i)=>`<label style="display:inline;margin-right:7px;font-size:12px"><input type="checkbox" ${wd.includes(i)?"checked":""} id="ac_wd_${a.id}_${i}"> ${lbl}</label>`).join("");
+          return `<tr>
           <td>${a.username}</td>
           <td><input type="checkbox" ${a.active?"checked":""} id="ac_active_${a.id}"></td>
           <td><input type="checkbox" ${a.has_inmail?"checked":""} id="ac_inmail_${a.id}"></td>
@@ -329,16 +334,33 @@
           <td>${a.connect_used}/<input type="number" value="${a.connect_cap}" id="ac_conn_${a.id}" style="width:58px"></td>
           <td>${a.message_used}/<input type="number" value="${a.message_cap}" id="ac_msg_${a.id}" style="width:58px"></td>
           <td>${a.inmail_used_month}/<input type="number" value="${a.inmail_monthly_cap}" id="ac_inm_${a.id}" style="width:48px"></td>
-          <td><button onclick="saveAccount(${a.id})">Save</button></td></tr>`).join("") || `<tr><td colspan="8">No accounts.</td></tr>`;
+          <td rowspan="2"><button onclick="saveAccount(${a.id})">Save</button></td></tr>
+          <tr class="schedrow"><td colspan="7">
+            <b style="font-size:12px">Send window</b>
+            <input type="number" min="0" max="23" value="${a.send_start_hour}" id="ac_sh_${a.id}" style="width:52px">:00
+            – <input type="number" min="1" max="24" value="${a.send_end_hour}" id="ac_eh_${a.id}" style="width:52px">:00
+            &nbsp;<input value="${a.send_timezone||'Europe/London'}" id="ac_tz_${a.id}" style="width:150px" placeholder="Europe/London">
+            &nbsp;&nbsp;${days}
+            &nbsp;&nbsp;<label style="display:inline;font-size:12px"><input type="checkbox" ${a.skip_bank_holidays?"checked":""} id="ac_bh_${a.id}"> Skip bank holidays</label>
+            <input value="${a.holiday_country||'GB'}" id="ac_hc_${a.id}" style="width:42px" title="Country code, e.g. GB">
+          </td></tr>`;
+        }).join("") || `<tr><td colspan="8">No accounts.</td></tr>`;
       });
     }
     window.saveAccount = (id) => {
+      const weekdays = []; for (let i=0;i<7;i++){ if (document.getElementById("ac_wd_"+id+"_"+i).checked) weekdays.push(i); }
       j(`api/account/${id}/`, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({
         active: document.getElementById("ac_active_"+id).checked,
         has_inmail: document.getElementById("ac_inmail_"+id).checked,
         connect_cap: document.getElementById("ac_conn_"+id).value,
         message_cap: document.getElementById("ac_msg_"+id).value,
         inmail_monthly_cap: document.getElementById("ac_inm_"+id).value,
+        send_start_hour: document.getElementById("ac_sh_"+id).value,
+        send_end_hour: document.getElementById("ac_eh_"+id).value,
+        send_timezone: document.getElementById("ac_tz_"+id).value,
+        send_weekdays: weekdays,
+        skip_bank_holidays: document.getElementById("ac_bh_"+id).checked,
+        holiday_country: document.getElementById("ac_hc_"+id).value,
       })}).then(r => { if(r.ok) loadAccounts(); else alert(r.error||"failed"); });
     };
     window.addAccount = () => {
@@ -493,11 +515,14 @@
     let INBOX_ACCTS_LOADED = false, CUR_THREAD = null;
     function loadInbox(){
       if (!INBOX_ACCTS_LOADED){
-        j("api/inbox/accounts/").then(d => {
+        Promise.all([j("api/inbox/accounts/"), j("api/campaigns/"), j("api/leads/")]).then(([d, cd, ld]) => {
           const sel = document.getElementById("inboxacct");
           d.accounts.forEach(a => { const o = document.createElement("option"); o.value = a.id; o.textContent = a.name; sel.appendChild(o); });
-          sel.onchange = loadThreads;
-          document.getElementById("inboxfilter").onchange = loadThreads;
+          const camp = document.getElementById("inboxcamp");
+          camp.innerHTML = `<option value="">All campaigns</option>` + (cd.campaigns||[]).map(c=>`<option value="${c.id}">${c.name}</option>`).join("");
+          const list = document.getElementById("inboxlist");
+          list.innerHTML = `<option value="">All lists</option>` + (ld.lists||[]).map(l=>`<option value="${l.id}">${l.name}</option>`).join("");
+          ["inboxacct","inboxcamp","inboxlist","inboxfilter"].forEach(id => document.getElementById(id).onchange = loadThreads);
           INBOX_ACCTS_LOADED = true;
         });
       }
@@ -506,7 +531,10 @@
     function loadThreads(){
       const acct = document.getElementById("inboxacct").value;
       const f = document.getElementById("inboxfilter").value;
-      j("api/inbox/threads/?filter=" + f + (acct ? "&account="+acct : "")).then(d => {
+      const camp = document.getElementById("inboxcamp").value;
+      const list = document.getElementById("inboxlist").value;
+      const q = "api/inbox/threads/?filter=" + f + (acct ? "&account="+acct : "") + (camp ? "&campaign="+camp : "") + (list ? "&lead_list="+list : "");
+      j(q).then(d => {
         const list = document.getElementById("threadlist");
         if (!d.threads.length){ list.innerHTML = `<div class="hint" style="padding:16px">No conversations yet.</div>`; return; }
         list.innerHTML = d.threads.map(t => `
@@ -663,7 +691,7 @@
       document.querySelector("#senders tbody").innerHTML = d.senders.map(s=>`<tr><td>${s.username}</td><td>${s.active?"yes":"no"}</td><td>${s.has_inmail?"yes":"no"}</td><td>${c(s.usage,"connect")}</td><td>${c(s.usage,"message")}</td></tr>`).join("") || `<tr><td colspan="5">No senders — add one in Accounts.</td></tr>`; });
 
     // ---------- Flow builder ----------
-    const STEP_TYPES = [["connect","Send Connection Request"],["message","Send Message"],["inmail","Send InMail"],["wait","Wait"],["profile_visit","View Profile"],["like_post","Like Post"],["end","End — stop here"]];
+    const STEP_TYPES = [["connect","Send Connection Request"],["message","Send Message"],["inmail","Send InMail"],["wait","Wait"],["profile_visit","View Profile"],["like_post","Like Post"],["end","End — stop here"],["blank","Blank — no action (resume)"]];
     const FIELDS = { connect:[["personalised_note","Connection note","textarea"],["wait_days_before_branch_decision","Days to wait for acceptance","number"]], message:[["template","Message","textarea"]], inmail:[["subject","Subject","input"],["body","Body","textarea"]], wait:[["days","Wait days","number"]], profile_visit:[], like_post:[] };
     function branchOpts(t){ if(t==="end")return[]; if(t==="connect")return[["success","if accepted","yes"],["failure","if NOT accepted","no"]]; if(t==="message")return[["success","if replied","yes"],["failure","if no reply","no"]]; return[["success","then (next step)","yes"]]; }
     let CUR = null;
@@ -690,8 +718,8 @@
         return `<label>${l}</label>${el}`; }).join("");
       return `<div class="editor" data-step="${n.id}" style="display:none">${inputs}<button onclick="saveStep(${n.id})">Save</button></div>`;
     }
-    const TICON = { connect:"🤝", message:"✉️", inmail:"📨", wait:"⏱️", profile_visit:"👁️", like_post:"👍", end:"⚑" };
-    const TLABEL = { connect:"Send connection request", message:"Send message", inmail:"Send InMail", wait:"Wait", profile_visit:"View profile", like_post:"Like post", end:"End" };
+    const TICON = { connect:"🤝", message:"✉️", inmail:"📨", wait:"⏱️", profile_visit:"👁️", like_post:"👍", end:"⚑", blank:"⤵️" };
+    const TLABEL = { connect:"Send connection request", message:"Send message", inmail:"Send InMail", wait:"Wait", profile_visit:"View profile", like_post:"Like post", end:"End", blank:"Blank (no action)" };
     function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;"); }
     function subLabel(n){
       const c = n.config || {};
@@ -700,6 +728,7 @@
       if (n.step_type==="inmail") return (c.subject||"").trim().slice(0,42) || "no subject yet";
       if (n.step_type==="connect"){ const d=Number(c.wait_days_before_branch_decision||14); return `decide after ${d} days`; }
       if (n.step_type==="end") return "sequence stops here";
+      if (n.step_type==="blank") return "no action — passes through";
       return "";
     }
     function condLabel(type, branch){

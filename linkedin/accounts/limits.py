@@ -67,6 +67,106 @@ def record_action(account, action_type, date=None) -> int:
     return counter.count
 
 
+# ── Per-account send schedule + paced "drip" ──────────────────────────
+
+
+def _account_tz(account):
+    from zoneinfo import ZoneInfo
+
+    try:
+        return ZoneInfo(account.send_timezone or "UTC")
+    except Exception:
+        return ZoneInfo("UTC")
+
+
+def _is_bank_holiday(account, local_date) -> bool:
+    if not account.skip_bank_holidays:
+        return False
+    try:
+        import holidays  # optional dep; degrades to "no holidays" if absent
+    except ImportError:
+        logger.warning("skip_bank_holidays set but 'holidays' package not installed — ignoring")
+        return False
+    try:
+        cal = holidays.country_holidays(account.holiday_country or "GB", years=local_date.year)
+        return local_date in cal
+    except Exception:
+        return False
+
+
+def is_send_time(account, dt=None) -> bool:
+    """True if ``dt`` (default now) is inside the account's send window: right
+    weekday, not a skipped bank holiday, and within [start, end) local hours."""
+    dt = dt or timezone.now()
+    local = dt.astimezone(_account_tz(account))
+    weekdays = account.send_weekdays or [0, 1, 2, 3, 4]
+    if local.weekday() not in weekdays:
+        return False
+    if _is_bank_holiday(account, local.date()):
+        return False
+    return account.send_start_hour <= local.hour < account.send_end_hour
+
+
+def next_send_time(account, dt=None):
+    """Earliest send-eligible moment at or after ``dt`` for this account."""
+    from datetime import timedelta
+
+    dt = dt or timezone.now()
+    tz = _account_tz(account)
+    weekdays = account.send_weekdays or [0, 1, 2, 3, 4]
+    local = dt.astimezone(tz)
+    for _ in range(367):  # at most a year ahead
+        ok_day = local.weekday() in weekdays and not _is_bank_holiday(account, local.date())
+        if ok_day:
+            win_start = local.replace(hour=account.send_start_hour, minute=0, second=0, microsecond=0)
+            win_end = local.replace(hour=account.send_end_hour, minute=0, second=0, microsecond=0)
+            if local < win_start:
+                return win_start  # window opens later today (tz-aware)
+            if local < win_end:
+                return local  # already inside the window (== dt on the first pass)
+        # advance to the start of the next calendar day, local time
+        local = (local + timedelta(days=1)).replace(
+            hour=account.send_start_hour, minute=0, second=0, microsecond=0,
+        )
+    return dt
+
+
+def _window_seconds(account) -> float:
+    hours = max(1, (account.send_end_hour - account.send_start_hour))
+    return hours * 3600.0
+
+
+def _last_action_at(account, action_type):
+    from linkedin.models import ActionLog
+
+    return (
+        ActionLog.objects.filter(linkedin_profile=account, action_type=action_type)
+        .order_by("-created_at").values_list("created_at", flat=True).first()
+    )
+
+
+def next_action_at(account, action_type):
+    """When this account may next perform ``action_type`` — paces the day's cap
+    evenly across the send window (with mild jitter) so e.g. 25 connects drip out
+    over the working day instead of bursting, and never outside the window. A
+    return value <= now means 'go now'."""
+    import random
+    from datetime import timedelta
+
+    from linkedin.conf import ENABLE_ACTION_PACING
+
+    now = timezone.now()
+    if not ENABLE_ACTION_PACING:
+        return now
+    cap = cap_for(account, action_type)
+    if cap <= 0:
+        return next_send_time(account, now)
+    spacing = _window_seconds(account) / cap
+    last = _last_action_at(account, action_type)
+    base = now if last is None else last + timedelta(seconds=spacing * random.uniform(0.75, 1.25))
+    return next_send_time(account, base if base > now else now)
+
+
 def account_pool(campaign):
     """Active LinkedIn accounts attached to the campaign (via its users)."""
     from linkedin.models import LinkedInProfile

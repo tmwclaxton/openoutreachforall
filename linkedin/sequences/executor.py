@@ -170,9 +170,15 @@ def advance_state(session, state) -> None:
         step.step_type == SequenceStep.StepType.CONNECT and state.awaiting_decision
     )
     if consumes_cap:
-        from linkedin.accounts.limits import has_capacity
+        from linkedin.accounts.limits import has_capacity, next_action_at
         if not has_capacity(session.linkedin_profile, action):
             _defer_to_tomorrow(state)
+            return
+        # Pace the day's budget across the account's send window (and never send
+        # outside it) — drip, don't burst.
+        slot = next_action_at(session.linkedin_profile, action)
+        if slot > timezone.now():
+            _defer_until(state, slot)
             return
     # InMail also respects the monthly Premium allowance.
     if step.step_type == SequenceStep.StepType.INMAIL:
@@ -185,7 +191,7 @@ def advance_state(session, state) -> None:
         raise ValueError(f"Unknown step_type {step.step_type!r}")
     # Browser actions assume a live page; ensure it (idempotent) for any
     # step that touches LinkedIn (wait/end don't).
-    if step.step_type not in (SequenceStep.StepType.WAIT, SequenceStep.StepType.END):
+    if step.step_type not in (SequenceStep.StepType.WAIT, SequenceStep.StepType.END, SequenceStep.StepType.BLANK):
         session.ensure_browser()
     handler(session, state, step)
 
@@ -254,6 +260,12 @@ def _handle_end(session, state, step):
     _complete(state)
 
 
+def _handle_blank(session, state, step):
+    # No-op pass-through — flips an End back on: continues to the next step
+    # without doing anything itself.
+    _goto(state, step.next_step(Branch.SUCCESS))
+
+
 def _handle_profile_visit(session, state, step):
     visit_profile(session, state)
     _log(session, state, step, ActionLog.ActionType.PROFILE_VISIT)
@@ -274,6 +286,7 @@ _HANDLERS = {
     SequenceStep.StepType.PROFILE_VISIT: _handle_profile_visit,
     SequenceStep.StepType.LIKE_POST: _handle_like_post,
     SequenceStep.StepType.END: _handle_end,
+    SequenceStep.StepType.BLANK: _handle_blank,
 }
 
 
@@ -301,6 +314,11 @@ def _complete(state):
 
 def _defer_to_tomorrow(state):
     state.next_action_due_at = timezone.now() + timedelta(days=1)
+    state.save(update_fields=["next_action_due_at"])
+
+
+def _defer_until(state, when):
+    state.next_action_due_at = when
     state.save(update_fields=["next_action_due_at"])
 
 
