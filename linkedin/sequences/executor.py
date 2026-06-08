@@ -112,6 +112,10 @@ def advance_state(session, state) -> None:
     handler = _HANDLERS.get(step.step_type)
     if handler is None:
         raise ValueError(f"Unknown step_type {step.step_type!r}")
+    # Browser actions assume a live page; ensure it (idempotent) for any
+    # non-wait step, since the page is launched lazily.
+    if step.step_type != SequenceStep.StepType.WAIT:
+        session.ensure_browser()
     handler(session, state, step)
 
 
