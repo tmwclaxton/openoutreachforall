@@ -267,8 +267,9 @@ def send_connection_request(session, state, step):
 
     lead = state.lead
     pdict = {"public_identifier": lead.public_identifier, "url": lead.linkedin_url, "urn": lead.urn or ""}
-    # The connect verb assumes the profile page is already open; this navigates there.
-    get_connection_status(session, lead.public_identifier)
+    # The connect verb assumes the profile page is already open; this navigates
+    # there. get_connection_status takes a profile dict, not the id string.
+    get_connection_status(session, pdict)
     # NOTE: linkedin_cli's active connect flow sends WITHOUT a note; the
     # personalised_note config is not yet wired (needs an app-side with-note flow).
     _send(session, pdict)
@@ -278,8 +279,9 @@ def is_connection_accepted(session, state) -> bool:
     from linkedin_cli.actions.status import get_connection_status
     from linkedin_cli.enums import ProfileState
 
-    status = get_connection_status(session, state.lead.public_identifier)
-    return str(status) == str(ProfileState.CONNECTED)
+    lead = state.lead
+    pdict = {"public_identifier": lead.public_identifier, "url": lead.linkedin_url, "urn": lead.urn or ""}
+    return str(get_connection_status(session, pdict)) == str(ProfileState.CONNECTED)
 
 
 def send_message(session, state, step):
