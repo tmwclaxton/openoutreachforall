@@ -31,14 +31,29 @@
     table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; }
     th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid #f1f5f9; font-size: 13px; } th { background: #f9fafb; color: #6b7280; }
     select, input { padding: 7px 8px; border-radius: 7px; border: 1px solid #d1d5db; font-size: 13px; }
-    .tree { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 18px; margin-top: 12px; }
-    .node { border: 1px solid #c7cdd6; border-radius: 8px; padding: 8px 12px; background: #fff; font-size: 13px; display: inline-block; }
-    .node b { text-transform: capitalize; }
-    .node .ed { color: #2563eb; cursor: pointer; margin-left: 8px; font-size: 12px; }
-    .branch { margin-left: 22px; padding-left: 16px; margin-top: 6px; }
-    .branch.yes { border-left: 3px solid #059669; } .branch.no { border-left: 3px solid #dc2626; }
-    .blabel { font-size: 11px; font-weight: 700; margin: 8px 0 4px; }
-    .yes .blabel { color: #059669; } .no .blabel { color: #dc2626; }
+    .flowwrap { margin-top: 12px; }
+    .flowtree { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 10px; padding: 26px 12px; overflow-x: auto; }
+    .flowtree ul { position: relative; padding: 26px 0 0 0; display: flex; justify-content: center; margin: 0; }
+    .flowtree > ul { padding-top: 0; }
+    .flowtree li { list-style: none; position: relative; padding: 26px 10px 0; text-align: center; }
+    .flowtree li::before, .flowtree li::after { content: ''; position: absolute; top: 0; right: 50%; border-top: 2px solid #cbd5e1; width: 50%; height: 26px; }
+    .flowtree li::after { right: auto; left: 50%; border-left: 2px solid #cbd5e1; }
+    .flowtree li:only-child::after, .flowtree li:only-child::before { display: none; }
+    .flowtree li:only-child { padding-top: 0; }
+    .flowtree li:first-child::before, .flowtree li:last-child::after { border: 0 none; }
+    .flowtree li:last-child::before { border-right: 2px solid #cbd5e1; border-radius: 0 6px 0 0; }
+    .flowtree li:first-child::after { border-radius: 6px 0 0 0; }
+    .flowtree ul ul::before { content: ''; position: absolute; top: 0; left: 50%; border-left: 2px solid #cbd5e1; width: 0; height: 26px; }
+    .tnode { display: inline-block; background: #fff; border: 1px solid #d1d5db; border-radius: 10px; padding: 10px 14px; font-size: 13px; min-width: 140px; box-shadow: 0 1px 2px rgba(0,0,0,.05); text-align: center; }
+    .tnode.start { background: #111827; color: #fff; border-color: #111827; font-weight: 700; }
+    .tnode .thd { display: flex; align-items: center; gap: 7px; justify-content: center; font-weight: 600; }
+    .tnode .ticon { font-size: 15px; }
+    .tnode .tsub { color: #6b7280; font-size: 11px; margin-top: 3px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tnode .ed { color: #2563eb; cursor: pointer; font-size: 11px; font-weight: 400; margin-left: 4px; }
+    .bchip { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 11px; border-radius: 999px; margin-bottom: 8px; }
+    .bchip.yes { background: #dcfce7; color: #166534; } .bchip.no { background: #fee2e2; color: #991b1b; } .bchip.neutral { background: #e0e7ff; color: #3730a3; }
+    .tend { display: inline-block; font-size: 12px; font-weight: 600; color: #64748b; padding: 5px 12px; }
+    .addrow { margin-top: 8px; }
     .addbtn { font-size: 12px; border: 1px dashed #9ca3af; background: #f9fafb; color: #374151; border-radius: 7px; padding: 4px 10px; cursor: pointer; margin: 6px 8px 0 0; }
     .addbtn.yes { border-color: #059669; color: #059669; } .addbtn.no { border-color: #dc2626; color: #dc2626; }
     .editor { margin: 6px 0 4px; padding: 10px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; max-width: 560px; }
@@ -95,8 +110,8 @@
         <button class="addbtn" onclick="renameSeq()" title="Rename this sequence">✎ Rename</button>
         <button class="addbtn no" onclick="deleteSeq()" title="Archive this sequence">🗑 Delete sequence</button>
       </div>
-      <p class="hint">Build the flow: each step branches. Green = <b>if YES</b> (accepted / replied), red = <b>if NO</b> (not accepted / no reply). Click a step to edit its message — use <code>{first_name}</code>.</p>
-      <div class="tree" id="flow">Pick or create a sequence…</div>
+      <p class="hint">The flow runs top to bottom. After each step it branches: a green <b>Accepted / Replied</b> pill is the yes-path, a red <b>Not accepted / No reply</b> pill is the no-path. Click <b>edit</b> on any box to change its message — use <code>{first_name}</code>.</p>
+      <div class="flowwrap" id="flow">Pick or create a sequence…</div>
     </div>
 
     <div class="tab" id="tab-unibox">
@@ -510,11 +525,48 @@
         return `<label>${l}</label>${el}`; }).join("");
       return `<div class="editor" data-step="${n.id}" style="display:none">${inputs}<button onclick="saveStep(${n.id})">Save</button></div>`;
     }
+    const TICON = { connect:"🤝", message:"✉️", inmail:"📨", wait:"⏱️", profile_visit:"👁️", like_post:"👍" };
+    const TLABEL = { connect:"Send connection request", message:"Send message", inmail:"Send InMail", wait:"Wait", profile_visit:"View profile", like_post:"Like post" };
+    function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;"); }
+    function subLabel(n){
+      const c = n.config || {};
+      if (n.step_type==="wait"){ const d=Number(c.days||0); return d?`${d} day${d>1?"s":""}`:"set duration"; }
+      if (n.step_type==="message") return (c.template||"").trim().slice(0,42) || "no text yet";
+      if (n.step_type==="inmail") return (c.subject||"").trim().slice(0,42) || "no subject yet";
+      if (n.step_type==="connect"){ const d=Number(c.wait_days_before_branch_decision||14); return `decide after ${d} days`; }
+      return "";
+    }
+    function condLabel(type, branch){
+      if (type==="connect") return branch==="success" ? "Accepted" : "Not accepted";
+      if (type==="message") return branch==="success" ? "Replied" : "No reply";
+      return "Then";
+    }
+    function nodeCard(n){
+      const sub = subLabel(n);
+      return `<div class="tnode ${n.step_type}">
+        <div class="thd"><span class="ticon">${TICON[n.step_type]||"•"}</span><span>${TLABEL[n.step_type]||n.step_type}</span><span class="ed" onclick="toggleEd(${n.id})">edit</span></div>
+        ${sub?`<div class="tsub" title="${esc(sub)}">${esc(sub)}</div>`:""}
+        ${editor(n)}
+        <div class="addrow">${addControls(n)}</div>
+      </div>`;
+    }
     function renderNode(n){
-      let h = `<div><span class="node"><b>${n.step_type.replace("_"," ")}</b><span class="ed" onclick="toggleEd(${n.id})">edit</span></span>${editor(n)}<div>${addControls(n)}</div></div>`;
-      if (n.success.length) h += `<div class="branch yes"><div class="blabel">✓ IF YES (accepted / replied)</div>${n.success.map(renderNode).join("")}</div>`;
-      if (n.failure.length) h += `<div class="branch no"><div class="blabel">✗ IF NO (not accepted / no reply)</div>${n.failure.map(renderNode).join("")}</div>`;
-      return h;
+      // Returns a node's card plus its children as a nested <ul>; the caller wraps in <li>.
+      const lis = [];
+      for (const [branch] of branchOpts(n.step_type)){
+        const arr = branch==="success" ? n.success : n.failure;
+        const cls = branch==="success" ? "yes" : "no";
+        arr.forEach(child => {
+          lis.push(`<li><div class="bchip ${cls}">${condLabel(n.step_type, branch)}</div>${renderNode(child)}</li>`);
+        });
+      }
+      const childUl = lis.length
+        ? `<ul>${lis.join("")}</ul>`
+        : `<ul><li><span class="tend">⚑ End</span></li></ul>`;
+      return `${nodeCard(n)}${childUl}`;
+    }
+    function renderTree(root){
+      return `<div class="flowtree"><ul><li><div class="tnode start">🚀 Campaign start</div><ul><li>${renderNode(root)}</li></ul></li></ul></div>`;
     }
     window.togglePicker = id => { const e=document.getElementById(id); e.style.display = e.style.display==="none"?"inline-block":"none"; };
     window.toggleEd = id => { const e=document.querySelector(`.editor[data-step="${id}"]`); if(e) e.style.display = e.style.display==="none"?"block":"none"; };
@@ -549,7 +601,7 @@
       if(!id){ document.getElementById("flow").textContent = "Pick or create a sequence…"; return; }
       j(`api/sequence/${id}/`).then(seq => {
         document.getElementById("flow").innerHTML = seq.root
-          ? renderNode(seq.root)
+          ? renderTree(seq.root)
           : `<p class="hint">Empty — add the first step (usually a connection request):</p><button class="addbtn yes" onclick="togglePicker('p_root_root')">+ Add first step</button>${typePicker(null,'root')}`;
       });
     }
