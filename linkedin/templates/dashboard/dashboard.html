@@ -69,6 +69,7 @@
         <select id="seqpick"></select>
         <input id="newseqname" placeholder="New sequence name">
         <button class="addbtn" onclick="createSeq()">+ Create sequence</button>
+        <button class="addbtn no" onclick="deleteSeq()" title="Archive this sequence">🗑 Delete sequence</button>
       </div>
       <p class="hint">Build the flow: each step branches. Green = <b>if YES</b> (accepted / replied), red = <b>if NO</b> (not accepted / no reply). Click a step to edit its message — use <code>{first_name}</code>.</p>
       <div class="tree" id="flow">Pick or create a sequence…</div>
@@ -385,6 +386,11 @@
     window.createSeq = () => {
       const name = document.getElementById("newseqname").value || "New sequence";
       j("api/sequences/create/", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({name})}).then(r => refreshSeqs(r.id));
+    };
+    window.deleteSeq = () => {
+      if (!CUR) { alert("Pick a sequence first"); return; }
+      if (!confirm("Delete (archive) this sequence?")) return;
+      j(`api/sequence/${CUR}/archive/`, {method:"POST"}).then(r => { if(r.ok){ CUR = null; refreshSeqs(); } else alert(r.error||"failed"); });
     };
     function loadSeq(id){
       CUR = id;

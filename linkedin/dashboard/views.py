@@ -438,6 +438,19 @@ _STEP_DEFAULTS = {
 @csrf_exempt
 @staff_member_required
 @require_POST
+def api_sequence_archive(request, sequence_id):
+    from linkedin.models import Sequence
+
+    seq = Sequence.objects.filter(pk=sequence_id).first()
+    if not seq:
+        return JsonResponse({"error": "not found"}, status=404)
+    seq.archive()  # soft-delete (recoverable); hidden from the picker
+    return JsonResponse({"ok": True})
+
+
+@csrf_exempt
+@staff_member_required
+@require_POST
 def api_create_step(request, sequence_id):
     from linkedin.models import Sequence, SequenceStep
 
