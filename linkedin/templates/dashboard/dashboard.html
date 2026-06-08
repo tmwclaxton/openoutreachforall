@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>OpenOutreach</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; background: #f3f4f6; color: #111827; }
@@ -15,6 +16,17 @@
     .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
     .kpi { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; }
     .kpi .label { font-size: 12px; color: #6b7280; } .kpi .value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+    .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; margin: 16px 0; }
+    .filterbar { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+    .filterbar label { font-size: 12px; color: #6b7280; margin-right: 6px; }
+    .filterbar select { padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; background: #fff; }
+    .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+    .pill.active { background: #dcfce7; color: #166534; } .pill.paused { background: #fef9c3; color: #854d0e; }
+    .pill.draft { background: #e5e7eb; color: #374151; } .pill.completed { background: #dbeafe; color: #1e40af; }
+    .pill.archived { background: #fee2e2; color: #991b1b; }
+    #camps button, #leadlists button { font-size: 12px; background: #fff; border: 1px solid #d1d5db; color: #374151; padding: 4px 9px; border-radius: 6px; cursor: pointer; margin-right: 4px; }
+    #camps button.no, #leadlists button.no { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+    #camps select, #leadlists select { font-size: 12px; padding: 3px 6px; border: 1px solid #d1d5db; border-radius: 6px; }
     h2 { font-size: 15px; margin-top: 24px; }
     table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; }
     th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid #f1f5f9; font-size: 13px; } th { background: #f9fafb; color: #6b7280; }
@@ -59,7 +71,18 @@
   <nav id="nav"></nav>
   <div class="wrap">
     <div class="tab active" id="tab-dashboard">
+      <div class="filterbar">
+        <span><label>Period</label><select id="dashdays">
+          <option value="0">All time</option>
+          <option value="7">Last 7 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="90">Last 90 days</option>
+          <option value="365">Last 12 months</option>
+        </select></span>
+        <span><label>Campaign</label><select id="dashcamp"><option value="">All campaigns</option></select></span>
+      </div>
       <div class="kpis" id="kpis"></div>
+      <div class="card"><canvas id="kpichart" height="90"></canvas></div>
       <h2>Senders</h2>
       <table id="senders"><thead><tr><th>Account</th><th>Active</th><th>InMail</th><th>Connect/day</th><th>Message/day</th></tr></thead><tbody></tbody></table>
     </div>
@@ -126,7 +149,7 @@
         </div>
         <label>Profile language</label>
         <select id="f_language"><option value="">Any</option><option value="en">English</option><option value="de">German</option><option value="fr">French</option><option value="es">Spanish</option><option value="pt">Portuguese</option></select>
-        <div><button id="searchbtn" onclick="runSearch()">Run search &amp; import</button></div>
+        <div style="display:flex;gap:10px;align-items:flex-end"><div><label>How many leads (target)</label><input type="number" id="searchtarget" value="30" min="1" style="width:90px"></div><button id="searchbtn" onclick="runSearch()">Run search &amp; import</button></div>
         <div class="hint">Free-text filters above build the search. For exact company / school / location / industry (LinkedIn typeahead), build it in LinkedIn and paste the URL:</div>
         <label>…or paste a LinkedIn search URL</label><input id="searchq" placeholder="https://www.linkedin.com/search/results/people/?...">
       </div>
@@ -135,23 +158,40 @@
         <label>List name</label><input id="ainame" placeholder="e.g. AI: fintech founders">
         <label>Describe who you are looking for (product / ideal customer)</label>
         <textarea id="aiprompt" rows="3" placeholder="e.g. Founders and heads of growth at early-stage UK fintech startups who would buy grant-finding software"></textarea>
+        <label>How many leads (target)</label><input type="number" id="aitarget" value="30" min="1" style="width:90px">
         <button id="aibtn" onclick="runAi()">Find with AI</button>
         <div class="hint">The LLM turns this into LinkedIn searches and enriches matches into a list (runs on the worker, ~couple of minutes).</div>
       </div>
-      <h2>Lead lists <span class="hint">(attach one to a campaign in the Campaigns tab)</span></h2>
-      <table id="leadlists"><thead><tr><th>Name</th><th>Source</th><th>Leads</th><th>Export</th></tr></thead><tbody></tbody></table>
+      <h2>Lead lists</h2>
+      <table id="leadlists"><thead><tr><th>Name</th><th>Source</th><th>Leads</th><th>Target</th><th>Export</th><th>Continue</th><th>Add to campaign</th></tr></thead><tbody></tbody></table>
     </div>
     <div class="tab" id="tab-campaigns">
-      <div class="bar">
-        <label>Campaign:</label> <select id="camppick"></select>
-        <label>State:</label> <select id="campstate"><option value="">All</option><option value="active">Active</option><option value="completed">Completed</option><option value="stopped_reply">Replied</option><option value="paused_manual">Paused</option></select>
-        <a href="/admin/linkedin/campaign/add/" target="_blank" class="addbtn">+ New campaign</a>
+      <h2>Create a campaign</h2>
+      <div class="editor" style="max-width:760px">
+        <label>Campaign name</label><input id="nc_name" placeholder="e.g. Grantgunner Outreach — June">
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div style="flex:1"><label>Sequence (the flow)</label><select id="nc_seq"></select></div>
+          <div style="flex:1"><label>Lead list (optional — add more later)</label><select id="nc_list"></select></div>
+        </div>
+        <label style="display:inline"><input type="checkbox" id="nc_active" checked> Launch active now (start contacting)</label>
+        <div><button onclick="createCampaign()">Create campaign</button></div>
+        <div class="hint">A campaign runs its sequence over the leads you add. Pause anytime — it stops mid-flow and resumes where it left off.</div>
       </div>
-      <table id="campleads"><thead><tr>
-        <th onclick="sortCamp('lead_name')">Lead ▾</th><th onclick="sortCamp('title')">Title</th>
-        <th onclick="sortCamp('company')">Company</th><th onclick="sortCamp('ai_score')">AI score ▾</th>
-        <th onclick="sortCamp('stage')">Stage</th><th onclick="sortCamp('state')">State</th><th></th>
-      </tr></thead><tbody></tbody></table>
+
+      <h2>Campaigns</h2>
+      <table id="camps"><thead><tr><th>Name</th><th>Sequence</th><th>Lead list</th><th>Leads</th><th>Status</th><th>Add leads</th><th>Actions</th></tr></thead><tbody></tbody></table>
+
+      <div id="camplead-panel" style="display:none">
+        <h2 id="camplead-title">Leads</h2>
+        <div class="bar">
+          <label>State:</label> <select id="campstate"><option value="">All</option><option value="active">Active</option><option value="completed">Completed</option><option value="stopped_reply">Replied</option><option value="paused_manual">Paused</option><option value="archived">Archived</option></select>
+        </div>
+        <table id="campleads"><thead><tr>
+          <th onclick="sortCamp('lead_name')">Lead ▾</th><th onclick="sortCamp('title')">Title</th>
+          <th onclick="sortCamp('company')">Company</th><th onclick="sortCamp('ai_score')">AI score ▾</th>
+          <th onclick="sortCamp('stage')">Stage</th><th onclick="sortCamp('state')">State</th><th></th>
+        </tr></thead><tbody></tbody></table>
+      </div>
     </div>
 
     <div class="tab" id="tab-context">
@@ -210,24 +250,65 @@
       })}).then(r => { if(r.ok){ document.getElementById("acc_email").value=""; document.getElementById("acc_pw").value=""; document.getElementById("acc_totp").value=""; loadAccounts(); alert("Account added."); } else alert(r.error||"failed"); });
     };
 
-    let CAMP_LEADS = [], CAMP_SORT = "ai_score", CAMP_DESC = true, CAMPS_LOADED = false;
+    let CAMP_LEADS = [], CAMP_SORT = "ai_score", CAMP_DESC = true;
+    let ALL_CAMPS = [], ALL_LISTS = [];
+    const STATUS_LABEL = { draft:"Draft", active:"Active", paused:"Paused", completed:"Completed", archived:"Archived" };
     function loadCampaigns(){
-      if (!CAMPS_LOADED){
-        j("api/campaigns/").then(d => {
-          const sel = document.getElementById("camppick");
-          sel.innerHTML = d.campaigns.map(c => `<option value="${c.id}">${c.name} (${c.leads})</option>`).join("") || `<option value="">No sequence campaigns</option>`;
-          sel.onchange = loadCampaignLeads;
-          document.getElementById("campstate").onchange = renderCampLeads;
-          CAMPS_LOADED = true;
-          if (d.campaigns.length) loadCampaignLeads();
-        });
-      } else { loadCampaignLeads(); }
+      Promise.all([j("api/campaigns/"), j("api/sequences/"), j("api/leads/")]).then(([cd, sd, ld]) => {
+        ALL_CAMPS = cd.campaigns; ALL_LISTS = ld.lists;
+        // Create-form dropdowns
+        document.getElementById("nc_seq").innerHTML = `<option value="">— pick a sequence —</option>` +
+          sd.sequences.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
+        const listOpts = `<option value="">— none yet —</option>` + ld.lists.map(l => `<option value="${l.id}">${l.name} (${l.count})</option>`).join("");
+        document.getElementById("nc_list").innerHTML = listOpts;
+        renderCampaigns();
+      });
     }
-    function loadCampaignLeads(){
-      const id = document.getElementById("camppick").value;
-      if (!id) return;
-      j(`api/campaign/${id}/leads/`).then(d => { CAMP_LEADS = d.leads; renderCampLeads(); });
+    function listSelect(cid){
+      return `<select id="addlist_${cid}"><option value="">— list —</option>` +
+        ALL_LISTS.map(l => `<option value="${l.id}">${l.name} (${l.count})</option>`).join("") + `</select>`;
     }
+    function renderCampaigns(){
+      document.querySelector("#camps tbody").innerHTML = ALL_CAMPS.map(c => {
+        const toggle = c.status === "active"
+          ? `<button onclick="setCampStatus(${c.id},'paused')">⏸ Pause</button>`
+          : `<button onclick="setCampStatus(${c.id},'active')">▶ Activate</button>`;
+        return `<tr>
+          <td><b>${c.name}</b></td><td>${c.sequence}</td><td>${c.lead_list||"—"}</td><td>${c.leads}</td>
+          <td><span class="pill ${c.status}">${STATUS_LABEL[c.status]||c.status}</span></td>
+          <td>${listSelect(c.id)} <button onclick="addLeads(${c.id})">+ Add</button></td>
+          <td>${toggle} <button onclick="viewCampLeads(${c.id}, '${(c.name||'').replace(/'/g,"\\'")}')">Leads</button> <button class="no" onclick="setCampStatus(${c.id},'archived')">🗑 Archive</button></td>
+        </tr>`;
+      }).join("") || `<tr><td colspan="7">No campaigns yet — create one above.</td></tr>`;
+    }
+    window.createCampaign = () => {
+      const name = gv("nc_name").trim();
+      const sequence_id = gv("nc_seq");
+      const lead_list_id = gv("nc_list") || null;
+      const status = document.getElementById("nc_active").checked ? "active" : "draft";
+      if (!name) { alert("Name the campaign"); return; }
+      if (!sequence_id) { alert("Pick a sequence"); return; }
+      j("api/campaigns/create/", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({name, sequence_id, lead_list_id, status})})
+        .then(r => { if(r.ok){ document.getElementById("nc_name").value=""; alert(`Campaign created${r.enrolled?` — ${r.enrolled} leads enrolled`:""}.`); loadCampaigns(); } else alert(r.error||"failed"); });
+    };
+    window.setCampStatus = (id, status) => {
+      if (status === "archived" && !confirm("Archive this campaign? It stops contacting and is hidden (not deleted).")) return;
+      j(`api/campaign/${id}/update/`, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({status})})
+        .then(r => { if(r.ok) loadCampaigns(); else alert(r.error||"failed"); });
+    };
+    window.addLeads = (id) => {
+      const list_id = document.getElementById("addlist_"+id).value;
+      if (!list_id) { alert("Pick a lead list to add"); return; }
+      j(`api/campaign/${id}/add-leads/`, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({list_id})})
+        .then(r => { if(r.ok){ alert(`Added ${r.enrolled} leads (${r.skipped_duplicate} skipped — already in a campaign).`); loadCampaigns(); } else alert(r.error||"failed"); });
+    };
+    window.viewCampLeads = (id, name) => {
+      document.getElementById("camplead-panel").style.display = "block";
+      document.getElementById("camplead-title").textContent = "Leads — " + name;
+      document.getElementById("campstate").onchange = renderCampLeads;
+      j(`api/campaign/${id}/leads/`).then(d => { CAMP_LEADS = d.leads; renderCampLeads();
+        document.getElementById("camplead-panel").scrollIntoView({behavior:"smooth"}); });
+    };
     window.sortCamp = (k) => { if (CAMP_SORT===k) CAMP_DESC = !CAMP_DESC; else { CAMP_SORT = k; CAMP_DESC = (k==="ai_score"); } renderCampLeads(); };
     function renderCampLeads(){
       const sf = document.getElementById("campstate").value;
@@ -294,12 +375,33 @@
     };
 
     function loadLeads(){
-      j("api/leads/").then(d => {
+      Promise.all([j("api/leads/"), j("api/campaigns/")]).then(([d, cd]) => {
+        const campOpts = `<option value="">— campaign —</option>` + cd.campaigns.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
         document.querySelector("#leadlists tbody").innerHTML = d.lists.map(l =>
-          `<tr><td>${l.name}</td><td>${l.source}</td><td>${l.count}</td><td><a href="api/leadlist/${l.id}/export/">Export CSV</a></td></tr>`
-        ).join("") || `<tr><td colspan="4">No lists yet.</td></tr>`;
+          `<tr><td>${l.name}</td><td>${l.source}</td><td>${l.count}</td>` +
+          `<td>${l.target}${l.pending?' <span class="hint">⏳ finding…</span>':''}</td>` +
+          `<td><a href="api/leadlist/${l.id}/export/">Export CSV</a></td>` +
+          `<td><button onclick="continueList(${l.id}, '${(l.name||'').replace(/'/g,"\\'")}', ${l.target})">Continue / refine</button></td>` +
+          `<td><select id="ll2c_${l.id}">${campOpts}</select> <button onclick="addListToCampaign(${l.id})">Add</button></td></tr>`
+        ).join("") || `<tr><td colspan="7">No lists yet.</td></tr>`;
       });
     }
+    window.addListToCampaign = (listId) => {
+      const campId = document.getElementById("ll2c_"+listId).value;
+      if (!campId) { alert("Pick a campaign"); return; }
+      j(`api/campaign/${campId}/add-leads/`, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({list_id: listId})})
+        .then(r => { if(r.ok) alert(`Added ${r.enrolled} leads (${r.skipped_duplicate} skipped — already in a campaign).`); else alert(r.error||"failed"); });
+    };
+    window.continueList = (id, name, target) => {
+      const refine = prompt(`Continue "${name}".\n\nRefine the search (optional — e.g. "these aren't right because…"), or leave blank:`);
+      if (refine === null) return;  // cancelled
+      const t = prompt(`Target lead count (currently ${target}). Raise it to find more, e.g. 1000:`, target);
+      if (t === null) return;
+      const body = { prompt: refine.trim() };
+      const n = parseInt(t, 10); if (!isNaN(n)) body.target_count = n;
+      j(`api/leads/${id}/continue/`, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)})
+        .then(r => { if(r.ok){ alert(`Queued — now targeting ${r.target} leads. They'll keep filling in on the worker.`); loadLeads(); } else alert(r.error||"failed"); });
+    };
     window.importCsv = () => {
       const name = document.getElementById("csvname").value;
       const csv_text = document.getElementById("csvtext").value;
@@ -310,12 +412,13 @@
     window.runSearch = () => {
       const name = document.getElementById("searchname").value;
       const url = document.getElementById("searchq").value.trim();
+      const target_count = parseInt(gv("searchtarget"), 10) || 30;
       let body;
       if (url) {
-        body = { name, query: url };
+        body = { name, query: url, target_count };
       } else {
         const network = ["F","S","O"].filter(n => document.getElementById("f_"+n).checked);
-        body = { name, filters: {
+        body = { name, target_count, filters: {
           keywords: gv("f_keywords"), firstName: gv("f_firstName"), lastName: gv("f_lastName"),
           title: gv("f_title"), company: gv("f_company"), school: gv("f_school"),
           language: gv("f_language"), network,
@@ -328,13 +431,54 @@
     window.runAi = () => {
       const name = gv("ainame"); const prompt = gv("aiprompt");
       if(!prompt){ alert("Describe who you are looking for"); return; }
+      const target_count = parseInt(gv("aitarget"), 10) || 30;
       const btn = document.getElementById("aibtn"); btn.textContent = "Queued — AI finding…"; btn.disabled = true;
-      j("api/leads/ai/", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({name, prompt})})
+      j("api/leads/ai/", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({name, prompt, target_count})})
         .then(r => { btn.textContent = "Find with AI"; btn.disabled = false; if(r.ok){ alert("AI search queued — leads appear in the list below in a couple of minutes. Hit refresh."); loadLeads(); } else alert(r.error||"failed"); });
     };
 
     const KPI = { connection_requests:"Connection Requests", messages_sent:"Messages Sent", inmails_sent:"InMails Sent", replies:"Replies", active:"Active", completed:"Completed" };
-    j("api/kpis/").then(d => { document.getElementById("kpis").innerHTML = Object.entries(KPI).map(([k,l]) => `<div class="kpi"><div class="label">${l}</div><div class="value">${d[k]??0}</div></div>`).join(""); });
+    function dashQuery(){
+      const days = document.getElementById("dashdays").value;
+      const camp = document.getElementById("dashcamp").value;
+      const p = new URLSearchParams({days}); if (camp) p.set("campaign", camp);
+      return "?" + p.toString();
+    }
+    const CHART_SERIES = [
+      ["connections","Connections","#2563eb"], ["messages","Messages","#10b981"],
+      ["inmails","InMails","#f59e0b"], ["replies","Replies","#ef4444"],
+    ];
+    let KCHART = null;
+    function hexA(h,a){ const n=parseInt(h.slice(1),16); return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`; }
+    function drawChart(d){
+      const ctx = document.getElementById("kpichart");
+      const data = {
+        labels: d.labels,
+        datasets: CHART_SERIES.map(([k,label,color]) => ({
+          label, data: d[k], borderColor: color, backgroundColor: hexA(color,0.12),
+          fill: true, tension: 0.4, borderWidth: 2, pointRadius: 2, pointHoverRadius: 4,
+        })),
+      };
+      const opts = { responsive:true, interaction:{mode:"index",intersect:false},
+        plugins:{ legend:{position:"bottom",labels:{usePointStyle:true,boxWidth:8}},
+          title:{display:true,text:`Activity per ${d.granularity}`,align:"start",font:{size:14}} },
+        scales:{ y:{beginAtZero:true,ticks:{precision:0},grid:{color:"#f1f5f9"}},
+          x:{grid:{display:false}} } };
+      if (KCHART) { KCHART.data = data; KCHART.update(); }
+      else KCHART = new Chart(ctx, { type:"line", data, options:opts });
+    }
+    function loadDash(){
+      const q = dashQuery();
+      j("api/kpis/"+q).then(d => { document.getElementById("kpis").innerHTML = Object.entries(KPI).map(([k,l]) => `<div class="kpi"><div class="label">${l}</div><div class="value">${d[k]??0}</div></div>`).join(""); });
+      j("api/kpi/timeseries/"+q).then(drawChart);
+    }
+    document.getElementById("dashdays").onchange = loadDash;
+    document.getElementById("dashcamp").onchange = loadDash;
+    j("api/campaigns/").then(d => {
+      const sel = document.getElementById("dashcamp");
+      sel.innerHTML = `<option value="">All campaigns</option>` + (d.campaigns||[]).map(c=>`<option value="${c.id}">${c.name}</option>`).join("");
+    });
+    loadDash();
     j("api/senders/").then(d => { const c=(u,k)=>u[k]?`${u[k].used}/${u[k].cap}`:"—";
       document.querySelector("#senders tbody").innerHTML = d.senders.map(s=>`<tr><td>${s.username}</td><td>${s.active?"yes":"no"}</td><td>${s.has_inmail?"yes":"no"}</td><td>${c(s.usage,"connect")}</td><td>${c(s.usage,"message")}</td></tr>`).join("") || `<tr><td colspan="5">No senders — add one in Accounts.</td></tr>`; });
 

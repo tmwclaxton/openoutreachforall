@@ -14,7 +14,7 @@ class Command(BaseCommand):
         from linkedin.inbox.poller import poll_replies, process_pending_sends
         from linkedin.leads.importer import backfill_lead_profiles, process_pending_searches
         from linkedin.ml.lead_score import score_pending_leads
-        from linkedin.sequences.executor import run_due_states
+        from linkedin.sequences.executor import enroll_active_campaigns, run_due_states
 
         profile = get_first_active_profile()
         if not profile:
@@ -35,13 +35,16 @@ class Command(BaseCommand):
                 # executor would otherwise fire its follow-up.
                 stopped = poll_replies(session)
                 manual = process_pending_sends(session)
+                # Pick up leads added to a campaign after launch (lists still filling).
+                enrolled = enroll_active_campaigns()
                 executed = run_due_states(session)
                 # Cap dashboard searches so enrichment doesn't block the cycle for hours.
                 searched = process_pending_searches(session, cap=30)
                 backfilled = backfill_lead_profiles(session, limit=8)
                 scored = score_pending_leads(limit=15)
                 self.stdout.write(
-                    f"cycle: replies_stopped={stopped} manual_sent={manual} executed={executed} "
+                    f"cycle: replies_stopped={stopped} manual_sent={manual} "
+                    f"enrolled={enrolled['enrolled']} executed={executed} "
                     f"searches={searched} backfilled={backfilled} scored={scored}",
                     ending="\n",
                 )

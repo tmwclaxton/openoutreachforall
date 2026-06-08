@@ -24,6 +24,56 @@ def dashboard_page(request):
 
 
 @staff_member_required
+def api_kpi_timeseries(request):
+    """Per-bucket counts (connections/messages/inmails/replies) for the chart.
+    Granularity: day (<=45d window), week (<=180d), else month."""
+    from datetime import timedelta
+
+    from django.db.models import Count
+    from django.db.models.functions import TruncDay, TruncMonth, TruncWeek
+    from django.utils import timezone
+
+    from linkedin.models import ActionLog, Message
+
+    days = int(request.GET.get("days") or 30)
+    campaign = request.GET.get("campaign") or None
+    window = days if days else 365
+    if window <= 45:
+        gran, trunc = "day", TruncDay
+    elif window <= 180:
+        gran, trunc = "week", TruncWeek
+    else:
+        gran, trunc = "month", TruncMonth
+    start = timezone.now() - timedelta(days=window)
+
+    def series(qs, ts_field):
+        qs = qs.filter(**{f"{ts_field}__gte": start})
+        rows = qs.annotate(b=trunc(ts_field)).values("b").annotate(c=Count("id"))
+        return {r["b"].date().isoformat(): r["c"] for r in rows if r["b"]}
+
+    base = ActionLog.objects.all()
+    if campaign:
+        base = base.filter(campaign_id=campaign)
+    connects = series(base.filter(action_type="connect"), "created_at")
+    messages = series(base.filter(action_type="message"), "created_at")
+    inmails = series(base.filter(action_type="inmail"), "created_at")
+    rep_qs = Message.objects.filter(direction="in")
+    if campaign:
+        rep_qs = rep_qs.filter(thread__lead__campaign_states__campaign_id=campaign)
+    replies = series(rep_qs, "sent_at")
+
+    labels = sorted(set(connects) | set(messages) | set(inmails) | set(replies))
+    return JsonResponse({
+        "granularity": gran,
+        "labels": labels,
+        "connections": [connects.get(d, 0) for d in labels],
+        "messages": [messages.get(d, 0) for d in labels],
+        "inmails": [inmails.get(d, 0) for d in labels],
+        "replies": [replies.get(d, 0) for d in labels],
+    })
+
+
+@staff_member_required
 def api_context(request):
     from linkedin.models import SiteConfig
 
@@ -155,16 +205,133 @@ def api_campaigns(request):
     from linkedin.models import Campaign
 
     out = []
-    for c in Campaign.objects.filter(sequence__isnull=False).order_by("-id"):
+    qs = Campaign.objects.filter(sequence__isnull=False).exclude(
+        status=Campaign.Status.ARCHIVED
+    ).select_related("sequence", "lead_list").order_by("-id")
+    for c in qs:
         out.append({
             "id": c.pk,
             "name": c.name,
             "status": c.status,
             "sequence": c.sequence.name if c.sequence else "",
+            "sequence_id": c.sequence_id,
             "lead_list": c.lead_list.name if c.lead_list else "",
+            "lead_list_id": c.lead_list_id,
             "leads": c.lead_states.count(),
         })
     return JsonResponse({"campaigns": out})
+
+
+@csrf_exempt
+@staff_member_required
+@require_POST
+def api_campaign_create(request):
+    """Create a sequence-driven campaign natively (no Django admin): name +
+    sequence + optional lead list. Launches active by default and enrolls the
+    list's leads immediately."""
+    from django.db import IntegrityError
+
+    from linkedin.models import Campaign
+    from linkedin.sequences.executor import enroll_campaign
+
+    payload = json.loads(request.body or "{}")
+    name = (payload.get("name") or "").strip()
+    sequence_id = payload.get("sequence_id")
+    lead_list_id = payload.get("lead_list_id") or None
+    status = payload.get("status") or Campaign.Status.ACTIVE
+    if not name:
+        return JsonResponse({"error": "name required"}, status=400)
+    if not sequence_id:
+        return JsonResponse({"error": "pick a sequence"}, status=400)
+    try:
+        campaign = Campaign.objects.create(
+            name=name, sequence_id=sequence_id, lead_list_id=lead_list_id, status=status,
+        )
+    except IntegrityError:
+        return JsonResponse({"error": "a campaign with that name already exists"}, status=400)
+    enrolled = 0
+    if status == Campaign.Status.ACTIVE and lead_list_id:
+        enrolled = enroll_campaign(campaign).get("enrolled", 0)
+    return JsonResponse({"ok": True, "id": campaign.pk, "enrolled": enrolled})
+
+
+def _set_states(campaign, from_states, to_state, *, due_now=False):
+    """Bulk-move a campaign's lead states between lifecycle states (pause/resume/
+    archive). Never deletes — terminal/paused moves only."""
+    from django.utils import timezone
+
+    from linkedin.models import LeadCampaignState
+
+    qs = LeadCampaignState.objects.filter(campaign=campaign, state__in=from_states)
+    fields = {"state": to_state}
+    if due_now:
+        fields["next_action_due_at"] = timezone.now()
+    return qs.update(**fields)
+
+
+@csrf_exempt
+@staff_member_required
+@require_POST
+def api_campaign_update(request, campaign_id):
+    """Update a campaign: rename, swap sequence/list, or change status. Status
+    changes drive the lead states — pause→paused_manual, activate→active (due
+    now) + enroll, archive→archived (terminal). No hard deletes."""
+    from linkedin.models import Campaign, LeadCampaignState
+    from linkedin.sequences.executor import enroll_campaign
+
+    campaign = Campaign.objects.filter(pk=campaign_id).first()
+    if not campaign:
+        return JsonResponse({"error": "not found"}, status=404)
+    payload = json.loads(request.body or "{}")
+    S, LS = Campaign.Status, LeadCampaignState.State
+
+    updates = []
+    if "name" in payload and payload["name"].strip():
+        campaign.name = payload["name"].strip(); updates.append("name")
+    if "sequence_id" in payload:
+        campaign.sequence_id = payload["sequence_id"] or None; updates.append("sequence")
+    if "lead_list_id" in payload:
+        campaign.lead_list_id = payload["lead_list_id"] or None; updates.append("lead_list")
+
+    status = payload.get("status")
+    enrolled = 0
+    if status and status != campaign.status:
+        campaign.status = status; updates.append("status")
+        if status == S.ACTIVE:
+            _set_states(campaign, [LS.PAUSED_MANUAL], LS.ACTIVE, due_now=True)
+            enrolled = enroll_campaign(campaign).get("enrolled", 0)
+        elif status == S.PAUSED:
+            _set_states(campaign, [LS.ACTIVE], LS.PAUSED_MANUAL)
+        elif status == S.ARCHIVED:
+            _set_states(campaign, [LS.ACTIVE, LS.PAUSED_MANUAL], LS.ARCHIVED)
+
+    if updates:
+        campaign.save()
+    return JsonResponse({"ok": True, "status": campaign.status, "enrolled": enrolled})
+
+
+@csrf_exempt
+@staff_member_required
+@require_POST
+def api_campaign_add_leads(request, campaign_id):
+    """Add a lead list's leads into this campaign (a campaign can accumulate
+    leads from several lists). If the campaign has no primary list yet, adopt
+    this one as it."""
+    from linkedin.models import Campaign, LeadList
+    from linkedin.sequences.executor import enroll_lead_list
+
+    campaign = Campaign.objects.filter(pk=campaign_id).first()
+    if not campaign:
+        return JsonResponse({"error": "not found"}, status=404)
+    payload = json.loads(request.body or "{}")
+    ll = LeadList.objects.filter(pk=payload.get("list_id")).first()
+    if not ll:
+        return JsonResponse({"error": "lead list not found"}, status=404)
+    if not campaign.lead_list_id:
+        campaign.lead_list = ll
+        campaign.save(update_fields=["lead_list"])
+    result = enroll_lead_list(campaign, ll)
+    return JsonResponse({"ok": True, **result})
 
 
 @staff_member_required
@@ -269,7 +436,10 @@ def api_leads(request):
 
     lists = []
     for ll in LeadList.objects.filter(archived_at__isnull=True).order_by("-created_at"):
-        lists.append({"id": ll.pk, "name": ll.name, "source": ll.source_type, "count": ll.leads.count()})
+        lists.append({
+            "id": ll.pk, "name": ll.name, "source": ll.source_type,
+            "count": ll.leads.count(), "target": ll.target_count, "pending": ll.pending_search,
+        })
     return JsonResponse({"lists": lists})
 
 
@@ -337,8 +507,9 @@ def api_leads_search(request):
     ll = importer.create_lead_list(
         name=name, owner=request.user, source_type=LeadList.SourceType.SEARCH_URL, source_url=url,
     )
+    ll.target_count = int(payload.get("target_count") or 30)
     ll.pending_search = True
-    ll.save(update_fields=["pending_search"])
+    ll.save(update_fields=["pending_search", "target_count"])
     return JsonResponse({"ok": True, "queued": True, "list_id": ll.pk})
 
 
@@ -359,9 +530,35 @@ def api_leads_ai(request):
     ll = importer.create_lead_list(
         name=name, owner=request.user, source_type=LeadList.SourceType.AI, source_url=prompt[:2000],
     )
+    ll.target_count = int(payload.get("target_count") or 30)
     ll.pending_search = True
-    ll.save(update_fields=["pending_search"])
+    ll.save(update_fields=["pending_search", "target_count"])
     return JsonResponse({"ok": True, "queued": True, "list_id": ll.pk})
+
+
+@csrf_exempt
+@staff_member_required
+@require_POST
+def api_leads_continue(request, list_id):
+    """Keep building a lead list: optionally refine the prompt ("these aren't
+    right, here's why…") and/or raise the target (e.g. 1000 not 30)."""
+    from linkedin.models import LeadList
+
+    ll = LeadList.objects.filter(pk=list_id).first()
+    if not ll:
+        return JsonResponse({"error": "not found"}, status=404)
+    payload = json.loads(request.body or "{}")
+    new_prompt = (payload.get("prompt") or "").strip()
+    target = payload.get("target_count")
+    if new_prompt:
+        ll.source_url = ((ll.source_url or "") + " | " + new_prompt)[:2000]
+    if target is not None:
+        ll.target_count = int(target)
+    else:
+        ll.target_count = max(ll.target_count, ll.leads.count() + 30)
+    ll.pending_search = True
+    ll.save()
+    return JsonResponse({"ok": True, "target": ll.target_count})
 
 
 @csrf_exempt
@@ -501,22 +698,42 @@ def api_create_step(request, sequence_id):
 
 @staff_member_required
 def api_kpis(request):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
     from linkedin.models import ActionLog, LeadCampaignState, MessageThread
 
     State = LeadCampaignState.State
+    days = int(request.GET.get("days") or 0)
+    campaign = request.GET.get("campaign") or None
+    since = timezone.now() - timedelta(days=days) if days else None
 
     def actions(t):
-        return ActionLog.objects.filter(action_type=t).count()
+        q = ActionLog.objects.filter(action_type=t)
+        if since:
+            q = q.filter(created_at__gte=since)
+        if campaign:
+            q = q.filter(campaign_id=campaign)
+        return q.count()
 
     def states(s):
-        return LeadCampaignState.objects.filter(state=s).count()
+        q = LeadCampaignState.objects.filter(state=s)
+        if campaign:
+            q = q.filter(campaign_id=campaign)
+        return q.count()
+
+    replies_q = MessageThread.objects.filter(messages__direction="in")
+    if since:
+        replies_q = replies_q.filter(messages__direction="in", messages__sent_at__gte=since)
+    if campaign:
+        replies_q = replies_q.filter(lead__campaign_states__campaign_id=campaign)
 
     return JsonResponse({
         "connection_requests": actions("connect"),
         "messages_sent": actions("message"),
         "inmails_sent": actions("inmail"),
-        # Conversations with at least one inbound message from the lead.
-        "replies": MessageThread.objects.filter(messages__direction="in").distinct().count(),
+        "replies": replies_q.distinct().count(),
         "active": states(State.ACTIVE),
         "completed": states(State.COMPLETED),
     })

@@ -227,16 +227,22 @@ def process_pending_searches(session, cap: int = SEARCH_IMPORT_CAP) -> list:
 
     results = []
     for ll in LeadList.objects.filter(pending_search=True, archived_at__isnull=True):
+        target = ll.target_count or 30
+        remaining = max(0, target - ll.leads.count())
+        this_pass = min(cap, remaining) or cap
+        created = 0
         try:
             if ll.source_type == LeadList.SourceType.AI:
-                r = import_ai_search(session, ll, ll.source_url or "", cap=cap)
+                created = import_ai_search(session, ll, ll.source_url or "", cap=this_pass).get("created", 0)
             else:
-                r = import_search_url(session, ll, ll.source_url or "", cap=cap)
-            results.append((ll.pk, r.get("created", 0)))
+                created = import_search_url(session, ll, ll.source_url or "", cap=this_pass).get("created", 0)
+            results.append((ll.pk, created))
         except Exception:
             logger.exception("Pending search failed for list %s", ll.pk)
             results.append((ll.pk, 0))
-        finally:
-            ll.pending_search = False
-            ll.save(update_fields=["pending_search"])
+        # Keep filling toward the target across cycles; stop when reached or when
+        # a pass adds nothing new (the search is exhausted).
+        ll.refresh_from_db(fields=["target_count"])
+        ll.pending_search = bool(ll.leads.count() < (ll.target_count or 0) and created > 0)
+        ll.save(update_fields=["pending_search"])
     return results

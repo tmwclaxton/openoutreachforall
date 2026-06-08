@@ -35,18 +35,16 @@ def busy_lead_ids(exclude_campaign=None) -> set:
     return set(qs.values_list("lead_id", flat=True))
 
 
-def enroll_campaign(campaign) -> dict:
-    """Create ACTIVE states (due now, at the sequence root) for every lead in the
-    campaign's lead_list that isn't already enrolled here OR live in another
-    campaign. Idempotent. Returns ``{"enrolled": n, "skipped_duplicate": m}``.
+def enroll_leads(campaign, leads) -> dict:
+    """Create ACTIVE states (due now, at the sequence root) for each lead in
+    ``leads`` not already enrolled here OR live in another campaign. Idempotent.
+    Returns ``{"enrolled": n, "skipped_duplicate": m}``.
     """
-    if not campaign.sequence_id or not campaign.lead_list_id:
+    if not campaign.sequence_id:
         return {"enrolled": 0, "skipped_duplicate": 0}
     root = campaign.sequence.root_step
     if root is None:
         return {"enrolled": 0, "skipped_duplicate": 0}
-
-    from crm.models import Lead
 
     existing = set(
         LeadCampaignState.objects.filter(campaign=campaign).values_list("lead_id", flat=True)
@@ -54,7 +52,7 @@ def enroll_campaign(campaign) -> dict:
     busy = busy_lead_ids(exclude_campaign=campaign)
     created = 0
     skipped = 0
-    for lead in Lead.objects.filter(lead_list_id=campaign.lead_list_id):
+    for lead in leads:
         if lead.pk in existing:
             continue
         if lead.pk in busy:
@@ -69,7 +67,42 @@ def enroll_campaign(campaign) -> dict:
             next_action_due_at=timezone.now(),
         )
         created += 1
+        existing.add(lead.pk)
     return {"enrolled": created, "skipped_duplicate": skipped}
+
+
+def enroll_campaign(campaign) -> dict:
+    """Enroll every lead in the campaign's own ``lead_list``. Idempotent."""
+    if not campaign.lead_list_id:
+        return {"enrolled": 0, "skipped_duplicate": 0}
+    from crm.models import Lead
+
+    return enroll_leads(campaign, Lead.objects.filter(lead_list_id=campaign.lead_list_id))
+
+
+def enroll_lead_list(campaign, lead_list) -> dict:
+    """Enroll a specific lead list's leads into ``campaign`` — lets a campaign
+    accumulate leads from more than one list (the lead_list FK stays as the
+    campaign's primary list)."""
+    from crm.models import Lead
+
+    return enroll_leads(campaign, Lead.objects.filter(lead_list_id=lead_list.pk))
+
+
+def enroll_active_campaigns() -> dict:
+    """Enroll not-yet-enrolled leads for every ACTIVE sequence-driven campaign.
+    Cheap (pure DB) — lets a campaign pick up leads added after launch (e.g. a
+    lead list still filling toward its target). Returns summed counts.
+    """
+    from linkedin.models import Campaign
+
+    totals = {"enrolled": 0, "skipped_duplicate": 0}
+    qs = Campaign.objects.filter(status=Campaign.Status.ACTIVE, sequence__isnull=False)
+    for campaign in qs:
+        r = enroll_campaign(campaign)
+        totals["enrolled"] += r["enrolled"]
+        totals["skipped_duplicate"] += r["skipped_duplicate"]
+    return totals
 
 
 # ── Executor loop ─────────────────────────────────────────────────────
