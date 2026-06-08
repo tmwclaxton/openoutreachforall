@@ -162,7 +162,7 @@ class LinkedInProfile(models.Model):
     linkedin_password = models.CharField(max_length=200)
     subscribe_newsletter = models.BooleanField(default=True)
     active = models.BooleanField(default=True)
-    connect_daily_limit = models.PositiveIntegerField(default=20)
+    connect_daily_limit = models.PositiveIntegerField(default=25)
     follow_up_daily_limit = models.PositiveIntegerField(default=25)
     legal_accepted = models.BooleanField(default=False)
     cookie_data = models.JSONField(null=True, blank=True)

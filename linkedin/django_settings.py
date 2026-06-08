@@ -20,6 +20,10 @@ DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
 
+# Allow the dashboard to embed the admin pages (Unibox/Accounts/Leads/Campaigns
+# tabs are same-origin iframes). Django's default DENY blocks even same-origin.
+X_FRAME_OPTIONS = "SAMEORIGIN"
+
 INSTALLED_APPS = [
     "django.contrib.sites",
     "django.contrib.admin",
