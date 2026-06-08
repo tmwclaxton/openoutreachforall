@@ -74,3 +74,50 @@ class TestDashboardApi:
     def test_requires_staff(self, client, db):
         resp = client.get("/dashboard/api/kpis/")
         assert resp.status_code in (302, 403)
+
+    def test_create_sequence_and_branching_steps(self, admin_client):
+        import json
+
+        from linkedin.models import Sequence, SequenceStep
+
+        seq_id = admin_client.post(
+            "/dashboard/api/sequences/create/", data=json.dumps({"name": "Built"}),
+            content_type="application/json",
+        ).json()["id"]
+        assert Sequence.objects.filter(pk=seq_id, name="Built").exists()
+
+        # Root connect, then a success (accepted) and failure (not-accepted) branch.
+        root = admin_client.post(
+            f"/dashboard/api/sequence/{seq_id}/step/",
+            data=json.dumps({"parent_id": None, "branch": "root", "step_type": "connect"}),
+            content_type="application/json",
+        ).json()["id"]
+        admin_client.post(
+            f"/dashboard/api/sequence/{seq_id}/step/",
+            data=json.dumps({"parent_id": root, "branch": "success", "step_type": "message"}),
+            content_type="application/json",
+        )
+        admin_client.post(
+            f"/dashboard/api/sequence/{seq_id}/step/",
+            data=json.dumps({"parent_id": root, "branch": "failure", "step_type": "inmail"}),
+            content_type="application/json",
+        )
+        connect = SequenceStep.objects.get(pk=root)
+        assert connect.next_step(SequenceStep.Branch.SUCCESS).step_type == "message"
+        assert connect.next_step(SequenceStep.Branch.FAILURE).step_type == "inmail"
+
+    def test_update_step_config(self, admin_client):
+        import json
+
+        from linkedin.models import Sequence, SequenceStep
+        from tests.factories import UserFactory
+
+        seq = Sequence.objects.create(name="S", owner=UserFactory())
+        step = SequenceStep.objects.create(sequence=seq, branch=SequenceStep.Branch.ROOT, step_type=SequenceStep.StepType.MESSAGE)
+        admin_client.post(
+            f"/dashboard/api/step/{step.pk}/",
+            data=json.dumps({"config": {"template": "Hi {first_name}!"}}),
+            content_type="application/json",
+        )
+        step.refresh_from_db()
+        assert step.config["template"] == "Hi {first_name}!"

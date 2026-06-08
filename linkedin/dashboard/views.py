@@ -43,6 +43,57 @@ def api_update_step(request, step_id):
     return JsonResponse({"ok": True, "config": step.config})
 
 
+@csrf_exempt
+@staff_member_required
+@require_POST
+def api_create_sequence(request):
+    from linkedin.models import Sequence
+
+    payload = json.loads(request.body or "{}")
+    name = (payload.get("name") or "").strip() or "New sequence"
+    seq = Sequence.objects.create(name=name, owner=request.user)
+    return JsonResponse({"id": seq.pk, "name": seq.name})
+
+
+_STEP_DEFAULTS = {
+    "connect": {"wait_days_before_branch_decision": 14, "personalised_note": ""},
+    "message": {"template": "Hi {first_name},"},
+    "inmail": {"subject": "", "body": ""},
+    "wait": {"days": 2},
+    "profile_visit": {},
+    "like_post": {},
+}
+
+
+@csrf_exempt
+@staff_member_required
+@require_POST
+def api_create_step(request, sequence_id):
+    from linkedin.models import Sequence, SequenceStep
+
+    seq = Sequence.objects.filter(pk=sequence_id).first()
+    if not seq:
+        return JsonResponse({"error": "not found"}, status=404)
+    payload = json.loads(request.body or "{}")
+    step_type = payload.get("step_type")
+    if step_type not in SequenceStep.StepType.values:
+        return JsonResponse({"error": "bad step_type"}, status=400)
+    branch = payload.get("branch", SequenceStep.Branch.ROOT)
+    if branch not in SequenceStep.Branch.values:
+        return JsonResponse({"error": "bad branch"}, status=400)
+    parent = None
+    if payload.get("parent_id"):
+        parent = SequenceStep.objects.filter(pk=payload["parent_id"], sequence=seq).first()
+    # One child per (parent, branch) — reject duplicates so the tree stays clean.
+    if SequenceStep.objects.filter(sequence=seq, parent=parent, branch=branch).exists():
+        return JsonResponse({"error": "branch already has a step"}, status=400)
+    step = SequenceStep.objects.create(
+        sequence=seq, parent=parent, branch=branch, step_type=step_type,
+        config=_STEP_DEFAULTS.get(step_type, {}), order_in_branch=0,
+    )
+    return JsonResponse({"id": step.pk})
+
+
 @staff_member_required
 def api_kpis(request):
     from linkedin.models import ActionLog, LeadCampaignState
