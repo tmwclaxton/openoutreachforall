@@ -282,6 +282,15 @@
         <div><button id="ai_save_btn" onclick="saveAiConfig()">Save AI settings</button> <span id="ai_saved" class="hint"></span></div>
       </div>
 
+      <h2>Slack notifications</h2>
+      <div class="editor" style="max-width:780px">
+        <p class="hint">Get a Slack ping the moment a lead replies — across <b>all</b> accounts. In Slack: create an <b>Incoming Webhook</b> pointing at your LinkedIn channel, then paste its URL here. (Kept separate from any other Slack setup.)</p>
+        <label style="display:inline"><input type="checkbox" id="slack_on"> Notify me on Slack when someone replies</label>
+        <label>Slack Incoming Webhook URL</label>
+        <input id="slack_url" placeholder="https://hooks.slack.com/services/T000/B000/xxxx">
+        <div><button onclick="saveAiConfig()">Save</button> <button onclick="testSlack()">Send test</button> <span id="slack_saved" class="hint"></span></div>
+      </div>
+
       <h2>AI Context — what you sell &amp; your ideal lead</h2>
       <div class="editor" style="max-width:780px">
         <p class="hint">The AI uses this to score every lead 0–100 for fit (shown in Leads/Campaigns), to generate AI searches, and to prioritise InMail. Be specific about Grantgunner and who is a great — or poor — lead.</p>
@@ -504,14 +513,23 @@
         document.getElementById("ai_base").value = d.api_base || "";
         document.getElementById("ai_key").value = "";
         document.getElementById("ai_key_state").textContent = d.key_set ? `A key is set (${d.key_hint}). Leave blank to keep it, or paste a new one to replace.` : "No key set yet.";
+        document.getElementById("slack_on").checked = !!d.slack_notify_replies;
+        document.getElementById("slack_url").value = d.slack_webhook_url || "";
       });
     }
+    window.testSlack = () => {
+      document.getElementById("slack_saved").textContent = "sending…";
+      j("api/slack/test/", {method:"POST", headers:{"Content-Type":"application/json"}})
+        .then(r => { document.getElementById("slack_saved").textContent = r.ok ? "Test sent ✓ — check Slack" : (r.error||"failed"); });
+    };
     window.saveAiConfig = () => {
       const body = {
         provider: document.getElementById("ai_provider").value,
         model: document.getElementById("ai_model").value,
         api_base: document.getElementById("ai_base").value,
         api_key: document.getElementById("ai_key").value,
+        slack_webhook_url: document.getElementById("slack_url").value,
+        slack_notify_replies: document.getElementById("slack_on").checked,
       };
       j("api/ai-config/save/", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)})
         .then(r => { document.getElementById("ai_saved").textContent = r.ok ? "Saved ✓" : (r.error||"save failed"); if(r.ok) loadAiConfig(); });

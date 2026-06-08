@@ -120,6 +120,8 @@ def api_ai_config(request):
         "key_set": bool(key),
         "key_hint": hint,
         "providers": [{"value": v, "label": l} for v, l in SiteConfig.LLMProvider.choices],
+        "slack_webhook_url": cfg.slack_webhook_url,
+        "slack_notify_replies": cfg.slack_notify_replies,
     })
 
 
@@ -143,8 +145,27 @@ def api_ai_config_save(request):
     new_key = (payload.get("api_key") or "").strip()
     if new_key:
         cfg.llm_api_key = new_key[:500]
+    if "slack_webhook_url" in payload:
+        cfg.slack_webhook_url = (payload.get("slack_webhook_url") or "").strip()[:500]
+    if "slack_notify_replies" in payload:
+        cfg.slack_notify_replies = bool(payload["slack_notify_replies"])
     cfg.save()
     return JsonResponse({"ok": True})
+
+
+@csrf_exempt
+@staff_member_required
+@require_POST
+def api_slack_test(request):
+    """Send a test message to the configured Slack webhook."""
+    from linkedin.models import SiteConfig
+    from linkedin.notify.slack import post_text
+
+    url = SiteConfig.load().slack_webhook_url
+    if not url:
+        return JsonResponse({"error": "Save a Slack webhook URL first"}, status=400)
+    ok = post_text(":wave: Test from OpenOutreach — LinkedIn reply notifications are wired up.", webhook_url=url)
+    return JsonResponse({"ok": ok} if ok else {"error": "Slack didn't accept the message — check the webhook URL"}, status=200 if ok else 400)
 
 
 @csrf_exempt

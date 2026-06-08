@@ -10,6 +10,7 @@ urlpatterns = [
     path("api/holiday-countries/", views.api_holiday_countries, name="dashboard_api_holiday_countries"),
     path("api/ai-config/", views.api_ai_config, name="dashboard_api_ai_config"),
     path("api/ai-config/save/", views.api_ai_config_save, name="dashboard_api_ai_config_save"),
+    path("api/slack/test/", views.api_slack_test, name="dashboard_api_slack_test"),
     path("api/kpis/", views.api_kpis, name="dashboard_api_kpis"),
     path("api/kpi/timeseries/", views.api_kpi_timeseries, name="dashboard_api_kpi_timeseries"),
     path("api/senders/", views.api_senders, name="dashboard_api_senders"),

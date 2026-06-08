@@ -130,6 +130,7 @@ def poll_replies(session, campaign=None) -> int:
         # us contacting them — as opposed to the account's pre-existing LinkedIn
         # conversations (from other tools), which pre-date enrollment.
         our_outbound = thread.contacted_by_tool
+        new_reply = None  # newest genuinely-new inbound reply, for Slack notify
         for m in messages:
             if (
                 m["direction"] == "out"
@@ -138,7 +139,7 @@ def poll_replies(session, campaign=None) -> int:
                 and m["sent_at"] >= state.created_at
             ):
                 our_outbound = True
-            Message.objects.get_or_create(
+            _obj, created = Message.objects.get_or_create(
                 thread=thread,
                 linkedin_message_id=m["linkedin_message_id"],
                 defaults={
@@ -161,6 +162,8 @@ def poll_replies(session, campaign=None) -> int:
                 and m["sent_at"] > state.last_action_at
             ):
                 inbound_reply = True
+                if created:  # only ping Slack for messages we haven't seen before
+                    new_reply = m
 
         thread.last_polled_at = timezone.now()
         thread.last_message_at = latest_ts
@@ -170,6 +173,10 @@ def poll_replies(session, campaign=None) -> int:
             thread.contacted_by_tool = True
         thread.save()
 
+        # Slack: notify on a brand-new reply to a conversation we started.
+        if new_reply and (our_outbound or thread.contacted_by_tool):
+            _notify_reply(state.lead, new_reply["body"], session)
+
         if inbound_reply and state.state == State.ACTIVE:
             state.state = State.STOPPED_REPLY
             state.save(update_fields=["state"])
@@ -177,3 +184,15 @@ def poll_replies(session, campaign=None) -> int:
             logger.info("Lead %s replied — sequence stopped", state.lead_id)
 
     return stopped
+
+
+def _notify_reply(lead, body, session):
+    """Fire a Slack reply notification (never raises into the poll loop)."""
+    try:
+        from linkedin.notify.slack import notify_reply
+
+        name = f"{lead.first_name or ''} {lead.last_name or ''}".strip() or (lead.public_identifier or "lead")
+        account = getattr(session.linkedin_profile, "linkedin_username", "") or ""
+        notify_reply(name, body, lead.linkedin_url, account)
+    except Exception as exc:
+        logger.warning("Slack reply notify failed: %r", exc)

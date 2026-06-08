@@ -48,6 +48,10 @@ class SiteConfig(models.Model):
     # Free-text "what we sell + who the ideal lead is" — drives AI lead scoring,
     # search keyword generation, and message personalisation.
     ai_context = models.TextField(blank=True, default="")
+    # Slack notifications (separate from any other project's Slack): a dedicated
+    # Incoming Webhook URL for a LinkedIn channel. Pinged when a lead replies.
+    slack_webhook_url = models.CharField(max_length=500, blank=True, default="")
+    slack_notify_replies = models.BooleanField(default=True)
 
     class Meta:
         app_label = "linkedin"
