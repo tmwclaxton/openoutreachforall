@@ -5,6 +5,8 @@ from linkedin.dashboard import views
 
 urlpatterns = [
     path("", views.dashboard_page, name="dashboard"),
+    path("api/context/", views.api_context, name="dashboard_api_context"),
+    path("api/context/save/", views.api_context_save, name="dashboard_api_context_save"),
     path("api/kpis/", views.api_kpis, name="dashboard_api_kpis"),
     path("api/senders/", views.api_senders, name="dashboard_api_senders"),
     path("api/sequences/", views.api_sequences, name="dashboard_api_sequences"),

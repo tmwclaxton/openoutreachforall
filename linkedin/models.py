@@ -41,6 +41,9 @@ class SiteConfig(models.Model):
     llm_api_key = models.CharField(max_length=500, blank=True, default="")
     ai_model = models.CharField(max_length=200, blank=True, default="")
     llm_api_base = models.CharField(max_length=500, blank=True, default="")
+    # Free-text "what we sell + who the ideal lead is" — drives AI lead scoring,
+    # search keyword generation, and message personalisation.
+    ai_context = models.TextField(blank=True, default="")
 
     class Meta:
         app_label = "linkedin"

@@ -23,6 +23,9 @@ class Lead(models.Model):
     company = models.CharField(max_length=200, blank=True, default="")
     title = models.CharField(max_length=300, blank=True, default="")
     location = models.CharField(max_length=200, blank=True, default="")
+    # AI fit score (0-100) vs the Grantgunner context, with a one-line reason.
+    ai_score = models.IntegerField(null=True, blank=True, db_index=True)
+    ai_reason = models.TextField(blank=True, default="")
     lead_list = models.ForeignKey(
         "linkedin.LeadList",
         null=True,

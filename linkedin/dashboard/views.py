@@ -23,6 +23,26 @@ def dashboard_page(request):
     return render(request, "dashboard/dashboard.html", {})
 
 
+@staff_member_required
+def api_context(request):
+    from linkedin.models import SiteConfig
+
+    return JsonResponse({"ai_context": SiteConfig.load().ai_context})
+
+
+@csrf_exempt
+@staff_member_required
+@require_POST
+def api_context_save(request):
+    from linkedin.models import SiteConfig
+
+    payload = json.loads(request.body or "{}")
+    cfg = SiteConfig.load()
+    cfg.ai_context = (payload.get("ai_context") or "")[:10000]
+    cfg.save(update_fields=["ai_context"])
+    return JsonResponse({"ok": True})
+
+
 @csrf_exempt
 @staff_member_required
 @require_POST
@@ -266,11 +286,12 @@ def api_leadlist_export(request, list_id):
     resp = HttpResponse(content_type="text/csv")
     resp["Content-Disposition"] = f'attachment; filename="leads-{ll.pk}.csv"'
     w = _csv.writer(resp)
-    w.writerow(["first_name", "last_name", "title", "company", "location", "linkedin_url", "public_identifier"])
-    for lead in ll.leads.all():
+    w.writerow(["first_name", "last_name", "title", "company", "location", "ai_score", "ai_reason", "linkedin_url", "public_identifier"])
+    for lead in ll.leads.all().order_by("-ai_score"):
         w.writerow([
-            lead.first_name, lead.last_name, lead.title, lead.company,
-            lead.location, lead.linkedin_url, lead.public_identifier,
+            lead.first_name, lead.last_name, lead.title, lead.company, lead.location,
+            lead.ai_score if lead.ai_score is not None else "", lead.ai_reason,
+            lead.linkedin_url, lead.public_identifier,
         ])
     return resp
 

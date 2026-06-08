@@ -127,11 +127,20 @@
       <table id="leadlists"><thead><tr><th>Name</th><th>Source</th><th>Leads</th><th>Export</th></tr></thead><tbody></tbody></table>
     </div>
     <div class="tab" id="tab-campaigns"><iframe data-src="/admin/linkedin/campaign/"></iframe></div>
+
+    <div class="tab" id="tab-context">
+      <h2>AI Context — what you sell &amp; your ideal lead</h2>
+      <div class="editor" style="max-width:780px">
+        <p class="hint">Claude uses this to score every lead 0–100 for fit (shown in Leads/Campaigns), to generate AI searches, and to prioritise InMail. Be specific about Grantgunner and who is a great — or poor — lead.</p>
+        <textarea id="ctxbox" rows="14" style="width:100%"></textarea>
+        <div><button id="ctxbtn" onclick="saveContext()">Save context</button> <span id="ctxsaved" class="hint"></span></div>
+      </div>
+    </div>
   </div>
 
   <script>
     const j = (u, o) => fetch(u, o).then(r => r.json());
-    const TABS = [["dashboard","Dashboard"],["flows","Flows"],["unibox","Unibox"],["accounts","Accounts"],["leads","Leads"],["campaigns","Campaigns"]];
+    const TABS = [["dashboard","Dashboard"],["flows","Flows"],["unibox","Unibox"],["accounts","Accounts"],["leads","Leads"],["campaigns","Campaigns"],["context","AI Context"]];
     const nav = document.getElementById("nav");
     TABS.forEach(([id, label], i) => { const b = document.createElement("button"); b.textContent = label; b.className = i===0?"active":""; b.onclick = () => showTab(id, b); nav.appendChild(b); });
     function showTab(id, btn) {
@@ -141,7 +150,17 @@
       const f = document.querySelector("#tab-"+id+" iframe"); if (f && !f.src) f.src = f.dataset.src;
       if (id === "leads") loadLeads();
       if (id === "unibox") loadInbox();
+      if (id === "context") loadContext();
     }
+
+    function loadContext(){
+      j("api/context/").then(d => { document.getElementById("ctxbox").value = d.ai_context || ""; });
+    }
+    window.saveContext = () => {
+      const ai_context = document.getElementById("ctxbox").value;
+      j("api/context/save/", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ai_context})})
+        .then(r => { document.getElementById("ctxsaved").textContent = r.ok ? "Saved ✓ — leads will be (re)scored by the worker." : "save failed"; });
+    };
 
     let INBOX_ACCTS_LOADED = false, CUR_THREAD = null;
     function loadInbox(){
