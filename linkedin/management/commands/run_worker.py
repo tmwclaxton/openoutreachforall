@@ -23,6 +23,11 @@ class Command(BaseCommand):
 
         interval = options["interval"]
         while True:
+            from django.db import connection
+
+            # Drop the cached connection so each cycle sees rows committed by the
+            # web process (e.g. a freshly queued search).
+            connection.close()
             try:
                 stopped = poll_replies(session)
                 searched = process_pending_searches(session)
