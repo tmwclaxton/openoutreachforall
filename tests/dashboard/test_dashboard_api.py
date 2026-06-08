@@ -35,7 +35,11 @@ class TestDashboardApi:
         ActionLog.objects.create(linkedin_profile=prof, campaign=camp, action_type="connect")
         ActionLog.objects.create(linkedin_profile=prof, campaign=camp, action_type="message")
         lead = Lead.objects.create(linkedin_url="https://www.linkedin.com/in/x/", public_identifier="x")
-        LeadCampaignState.objects.create(lead=lead, campaign=camp, state=LeadCampaignState.State.STOPPED_REPLY)
+        # Replies KPI = conversations with an inbound message.
+        from linkedin.models import Message, MessageThread
+
+        thread = MessageThread.objects.create(lead=lead, account=prof)
+        Message.objects.create(thread=thread, direction="in", linkedin_message_id="r1")
 
         data = admin_client.get("/dashboard/api/kpis/").json()
         assert data["connection_requests"] == 1
