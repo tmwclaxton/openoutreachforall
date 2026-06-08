@@ -36,6 +36,20 @@ def has_capacity(account, action_type, date=None) -> bool:
     return daily_count(account, action_type, date) < cap_for(account, action_type)
 
 
+def inmail_sent_this_month(account) -> int:
+    from linkedin.models import AccountDailyCounter
+
+    now = timezone.now()
+    rows = AccountDailyCounter.objects.filter(
+        account=account, action_type="inmail", date__year=now.year, date__month=now.month,
+    )
+    return sum(r.count for r in rows)
+
+
+def has_inmail_monthly_capacity(account) -> bool:
+    return inmail_sent_this_month(account) < (account.inmail_monthly_cap or 0)
+
+
 def record_action(account, action_type, date=None) -> int:
     """Increment the day's counter for (account, action_type); stamp last-used.
     Returns the new count. Idempotent row creation by (account, date, type).

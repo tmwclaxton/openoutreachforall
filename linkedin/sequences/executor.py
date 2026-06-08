@@ -125,6 +125,12 @@ def advance_state(session, state) -> None:
         if not has_capacity(session.linkedin_profile, action):
             _defer_to_tomorrow(state)
             return
+    # InMail also respects the monthly Premium allowance.
+    if step.step_type == SequenceStep.StepType.INMAIL:
+        from linkedin.accounts.limits import has_inmail_monthly_capacity
+        if not has_inmail_monthly_capacity(session.linkedin_profile):
+            _defer_to_tomorrow(state)
+            return
     handler = _HANDLERS.get(step.step_type)
     if handler is None:
         raise ValueError(f"Unknown step_type {step.step_type!r}")

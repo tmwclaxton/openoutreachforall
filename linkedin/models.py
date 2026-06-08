@@ -173,8 +173,10 @@ class LinkedInProfile(models.Model):
     legal_accepted = models.BooleanField(default=False)
     cookie_data = models.JSONField(null=True, blank=True)
     newsletter_processed = models.BooleanField(default=False)
-    # True when the account has Sales Navigator / Recruiter (InMail available).
+    # True when the account has Sales Navigator / Recruiter / Premium InMail.
     has_inmail = models.BooleanField(default=False)
+    # Premium gives a limited monthly InMail allowance (default 15).
+    inmail_monthly_cap = models.PositiveIntegerField(default=15)
     # M6: per-action daily caps + least-recently-used marker for round-robin.
     daily_caps_json = models.JSONField(default=default_daily_caps, blank=True)
     last_used_at = models.DateTimeField(null=True, blank=True)
