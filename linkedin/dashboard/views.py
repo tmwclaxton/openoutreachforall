@@ -70,12 +70,16 @@ def api_inbox_threads(request):
     from linkedin.models import MessageThread
 
     account = request.GET.get("account")
-    # Only conversations where the lead has actually replied (an inbound message).
+    # Conversations with at least one MESSAGE (excludes connection-request-only
+    # threads). filter: all | replied (has inbound) | sent (outbound, no reply yet).
+    f = request.GET.get("filter", "replied")
+    base = MessageThread.objects.filter(messages__isnull=False)
+    if f == "replied":
+        base = base.filter(messages__direction="in")
+    elif f == "sent":
+        base = base.filter(messages__direction="out").exclude(messages__direction="in")
     qs = (
-        MessageThread.objects.filter(messages__direction="in")
-        .distinct()
-        .select_related("lead", "account")
-        .order_by("-last_message_at", "-created_at")
+        base.distinct().select_related("lead", "account").order_by("-last_message_at", "-created_at")
     )
     if account:
         qs = qs.filter(account_id=account)

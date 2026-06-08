@@ -75,7 +75,7 @@
     </div>
 
     <div class="tab" id="tab-unibox">
-      <div class="bar"><b>Unibox</b> &nbsp; <label>Account:</label> <select id="inboxacct"><option value="">All accounts</option></select></div>
+      <div class="bar"><b>Unibox</b> &nbsp; <label>Account:</label> <select id="inboxacct"><option value="">All accounts</option></select> &nbsp; <label>Show:</label> <select id="inboxfilter"><option value="replied">Replied</option><option value="sent">Sent (no reply yet)</option><option value="all">All conversations</option></select></div>
       <div class="inbox">
         <div class="threadlist" id="threadlist"></div>
         <div class="convo" id="convo"><div class="hint" style="padding:24px">Select a conversation…</div></div>
@@ -149,14 +149,17 @@
         j("api/inbox/accounts/").then(d => {
           const sel = document.getElementById("inboxacct");
           d.accounts.forEach(a => { const o = document.createElement("option"); o.value = a.id; o.textContent = a.name; sel.appendChild(o); });
-          sel.onchange = loadThreads; INBOX_ACCTS_LOADED = true;
+          sel.onchange = loadThreads;
+          document.getElementById("inboxfilter").onchange = loadThreads;
+          INBOX_ACCTS_LOADED = true;
         });
       }
       loadThreads();
     }
     function loadThreads(){
       const acct = document.getElementById("inboxacct").value;
-      j("api/inbox/threads/" + (acct ? "?account="+acct : "")).then(d => {
+      const f = document.getElementById("inboxfilter").value;
+      j("api/inbox/threads/?filter=" + f + (acct ? "&account="+acct : "")).then(d => {
         const list = document.getElementById("threadlist");
         if (!d.threads.length){ list.innerHTML = `<div class="hint" style="padding:16px">No conversations yet.</div>`; return; }
         list.innerHTML = d.threads.map(t => `
