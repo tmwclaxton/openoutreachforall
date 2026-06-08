@@ -34,7 +34,8 @@ class Command(BaseCommand):
                 # executor would otherwise fire its follow-up.
                 stopped = poll_replies(session)
                 executed = run_due_states(session)
-                searched = process_pending_searches(session)
+                # Cap dashboard searches so enrichment doesn't block the cycle for hours.
+                searched = process_pending_searches(session, cap=30)
                 self.stdout.write(
                     f"cycle: replies_stopped={stopped} executed={executed} searches={searched}", ending="\n",
                 )
