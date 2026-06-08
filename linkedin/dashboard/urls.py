@@ -16,4 +16,7 @@ urlpatterns = [
     path("api/leads/csv/", views.api_leads_csv, name="dashboard_api_leads_csv"),
     path("api/leads/search/", views.api_leads_search, name="dashboard_api_leads_search"),
     path("api/leadlist/<int:list_id>/export/", views.api_leadlist_export, name="dashboard_api_leadlist_export"),
+    path("api/inbox/accounts/", views.api_inbox_accounts, name="dashboard_api_inbox_accounts"),
+    path("api/inbox/threads/", views.api_inbox_threads, name="dashboard_api_inbox_threads"),
+    path("api/inbox/thread/<int:thread_id>/", views.api_inbox_thread, name="dashboard_api_inbox_thread"),
 ]

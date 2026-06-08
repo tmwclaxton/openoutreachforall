@@ -45,6 +45,69 @@ def api_update_step(request, step_id):
     return JsonResponse({"ok": True, "config": step.config})
 
 
+def _lead_name(lead):
+    name = f"{lead.first_name} {lead.last_name}".strip()
+    return name or (lead.public_identifier or "").replace("-", " ").title()
+
+
+@staff_member_required
+def api_inbox_accounts(request):
+    from linkedin.models import LinkedInProfile
+
+    return JsonResponse({"accounts": [
+        {"id": a.pk, "name": a.linkedin_username} for a in LinkedInProfile.objects.all()
+    ]})
+
+
+@staff_member_required
+def api_inbox_threads(request):
+    from linkedin.models import MessageThread
+
+    account = request.GET.get("account")
+    qs = MessageThread.objects.select_related("lead", "account").order_by("-last_message_at", "-created_at")
+    if account:
+        qs = qs.filter(account_id=account)
+
+    threads = []
+    for t in qs[:300]:
+        last = t.messages.order_by("-sent_at", "-fetched_at").first()
+        threads.append({
+            "id": t.pk,
+            "lead_name": _lead_name(t.lead),
+            "account_id": t.account_id,
+            "account_name": t.account.linkedin_username if t.account else "",
+            "last_message": (last.body[:90] if last and last.body else ""),
+            "last_direction": last.direction if last else "",
+            "unread": t.read_at is None,
+            "has_reply": t.has_inbound_reply,
+        })
+    return JsonResponse({"threads": threads})
+
+
+@staff_member_required
+def api_inbox_thread(request, thread_id):
+    from django.utils import timezone
+
+    from linkedin.models import MessageThread
+
+    t = MessageThread.objects.select_related("lead", "account").filter(pk=thread_id).first()
+    if not t:
+        return JsonResponse({"error": "not found"}, status=404)
+    if t.read_at is None:
+        t.read_at = timezone.now()
+        t.save(update_fields=["read_at"])
+    msgs = [
+        {"direction": m.direction, "body": m.body, "sent_at": m.sent_at.isoformat() if m.sent_at else ""}
+        for m in t.messages.order_by("sent_at", "fetched_at")
+    ]
+    return JsonResponse({
+        "id": t.pk,
+        "lead_name": _lead_name(t.lead),
+        "account_name": t.account.linkedin_username if t.account else "",
+        "messages": msgs,
+    })
+
+
 @staff_member_required
 def api_leads(request):
     from linkedin.models import LeadList
