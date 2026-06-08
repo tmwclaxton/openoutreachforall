@@ -73,7 +73,11 @@ def poll_replies(session, campaign=None) -> int:
     """
     from linkedin.models import LeadCampaignState, Message, MessageThread
 
-    qs = LeadCampaignState.objects.filter(state=LeadCampaignState.State.ACTIVE)
+    State = LeadCampaignState.State
+    # Poll active leads (to stop on reply) AND finished/paused ones (so the
+    # unibox keeps syncing replies that arrive after a sequence completes).
+    pollable = [State.ACTIVE, State.COMPLETED, State.STOPPED_REPLY, State.PAUSED_MANUAL]
+    qs = LeadCampaignState.objects.filter(state__in=pollable)
     if campaign is not None:
         qs = qs.filter(campaign=campaign)
 
@@ -111,8 +115,8 @@ def poll_replies(session, campaign=None) -> int:
             thread.has_inbound_reply = True
         thread.save()
 
-        if inbound_reply:
-            state.state = LeadCampaignState.State.STOPPED_REPLY
+        if inbound_reply and state.state == State.ACTIVE:
+            state.state = State.STOPPED_REPLY
             state.save(update_fields=["state"])
             stopped += 1
             logger.info("Lead %s replied — sequence stopped", state.lead_id)

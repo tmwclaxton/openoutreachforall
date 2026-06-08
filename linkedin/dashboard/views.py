@@ -7,10 +7,12 @@ self-contained page (no SPA build pipeline).
 """
 from __future__ import annotations
 
+import csv as _csv
 import json
+from urllib.parse import quote
 
 from django.contrib.admin.views.decorators import staff_member_required
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST

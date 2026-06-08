@@ -126,7 +126,13 @@ class ToolScopeFilter(admin.SimpleListFilter):
     def queryset(self, request, qs):
         if self.value() == "all":
             return qs
-        return qs.filter(messages__direction="out", messages__sent_via_tool=True).distinct()
+        from django.db.models import Q
+
+        # Tool-initiated = we messaged into it, or the lead is campaign-managed.
+        return qs.filter(
+            Q(messages__direction="out", messages__sent_via_tool=True)
+            | Q(lead__campaign_states__isnull=False)
+        ).distinct()
 
 
 class LeadSourceFilter(admin.SimpleListFilter):
