@@ -80,6 +80,49 @@ def api_context(request):
     return JsonResponse({"ai_context": SiteConfig.load().ai_context})
 
 
+@staff_member_required
+def api_ai_config(request):
+    """AI provider settings for the management page. The API key is never echoed
+    back in full — only a masked hint and whether one is set."""
+    from linkedin.models import SiteConfig
+
+    cfg = SiteConfig.load()
+    key = cfg.llm_api_key or ""
+    hint = (key[:3] + "…" + key[-4:]) if len(key) >= 10 else ("•••• (set)" if key else "")
+    return JsonResponse({
+        "provider": cfg.llm_provider,
+        "model": cfg.ai_model,
+        "api_base": cfg.llm_api_base,
+        "key_set": bool(key),
+        "key_hint": hint,
+        "providers": [{"value": v, "label": l} for v, l in SiteConfig.LLMProvider.choices],
+    })
+
+
+@csrf_exempt
+@staff_member_required
+@require_POST
+def api_ai_config_save(request):
+    """Save AI provider/model/base, and the API key only when a new one is typed
+    (a blank key field leaves the stored key untouched)."""
+    from linkedin.models import SiteConfig
+
+    payload = json.loads(request.body or "{}")
+    cfg = SiteConfig.load()
+    provider = payload.get("provider")
+    if provider and provider in SiteConfig.LLMProvider.values:
+        cfg.llm_provider = provider
+    if "model" in payload:
+        cfg.ai_model = (payload.get("model") or "").strip()[:200]
+    if "api_base" in payload:
+        cfg.llm_api_base = (payload.get("api_base") or "").strip()[:500]
+    new_key = (payload.get("api_key") or "").strip()
+    if new_key:
+        cfg.llm_api_key = new_key[:500]
+    cfg.save()
+    return JsonResponse({"ok": True})
+
+
 @csrf_exempt
 @staff_member_required
 @require_POST
@@ -120,16 +163,15 @@ def api_update_step(request, step_id):
         if new_type not in SequenceStep.StepType.values:
             return JsonResponse({"error": "bad step_type"}, status=400)
         # Branch-arity safety: only connect/message carry a 'no' (failure) branch.
-        # Refuse a change that would orphan an existing failure branch.
-        branching = {SequenceStep.StepType.CONNECT, SequenceStep.StepType.MESSAGE}
+        # End keeps every following step intact (dormant), so it's exempt — any
+        # other non-branching type would orphan an existing failure branch.
+        branching = {SequenceStep.StepType.CONNECT, SequenceStep.StepType.MESSAGE, SequenceStep.StepType.END}
         if new_type not in branching and step.children.filter(branch=SequenceStep.Branch.FAILURE).exists():
             return JsonResponse(
                 {"error": "This step has a 'No reply / Not accepted' branch. Change it to "
                           "Send message or Send connection request, or remove that branch first."},
                 status=400,
             )
-        if new_type == SequenceStep.StepType.END and step.children.exists():
-            return JsonResponse({"error": "End can't have steps after it — remove them first."}, status=400)
         step.step_type = new_type
         fields.append("step_type")
         if not isinstance(new_config, dict):
@@ -142,6 +184,32 @@ def api_update_step(request, step_id):
 
     step.save(update_fields=fields)
     return JsonResponse({"ok": True, "step_type": step.step_type, "config": step.config})
+
+
+@csrf_exempt
+@staff_member_required
+@require_POST
+def api_delete_step(request, step_id):
+    """Remove a step and splice the branch back together: the steps that followed
+    it re-attach to its slot. So removing an End mid-branch makes the rest of the
+    branch run again — nothing below it was lost."""
+    from linkedin.models import SequenceStep
+
+    step = SequenceStep.objects.filter(pk=step_id).first()
+    if not step:
+        return JsonResponse({"error": "not found"}, status=404)
+    succ = list(step.children.filter(branch=SequenceStep.Branch.SUCCESS).order_by("order_in_branch"))
+    fail = list(step.children.filter(branch=SequenceStep.Branch.FAILURE).order_by("order_in_branch"))
+    if succ and fail:
+        return JsonResponse(
+            {"error": "This step splits into two paths — remove one path first."}, status=400,
+        )
+    for child in (succ or fail):
+        child.parent = step.parent
+        child.branch = step.branch
+        child.save(update_fields=["parent", "branch"])
+    step.delete()
+    return JsonResponse({"ok": True})
 
 
 def _lead_name(lead):
@@ -747,8 +815,6 @@ def api_create_step(request, sequence_id):
     # before it: the new step takes the slot and the old child re-parents onto
     # the new step's success branch (linear continuation).
     existing = SequenceStep.objects.filter(sequence=seq, parent=parent, branch=branch).first()
-    if step_type == SequenceStep.StepType.END and existing:
-        return JsonResponse({"error": "End can only be added where the path currently stops"}, status=400)
     step = SequenceStep.objects.create(
         sequence=seq, parent=parent, branch=branch, step_type=step_type,
         config=_STEP_DEFAULTS.get(step_type, {}), order_in_branch=0,

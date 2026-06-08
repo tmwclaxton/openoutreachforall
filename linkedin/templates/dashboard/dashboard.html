@@ -51,6 +51,8 @@
     .tnode .ticon { font-size: 15px; }
     .tnode .tsub { color: #6b7280; font-size: 11px; margin-top: 3px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .tnode .ed { color: #2563eb; cursor: pointer; font-size: 11px; font-weight: 400; margin-left: 4px; }
+    .tnode .rm { color: #b91c1c; cursor: pointer; font-size: 11px; font-weight: 700; margin-left: 6px; }
+    .flowtree ul.paused { opacity: .5; }
     .bchip { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 11px; border-radius: 999px; margin-bottom: 8px; }
     .bchip.yes { background: #dcfce7; color: #166534; } .bchip.no { background: #fee2e2; color: #991b1b; } .bchip.neutral { background: #e0e7ff; color: #3730a3; }
     .tend { display: inline-block; font-size: 12px; font-weight: 600; color: #64748b; padding: 5px 12px; }
@@ -69,6 +71,19 @@
     .chatrow.system .bubble { background: transparent; color: #94a3b8; font-size: 11px; max-width: 100%; text-align: center; padding: 2px; }
     .chatmeta { font-size: 10px; color: #9ca3af; margin-top: 3px; }
     .chatrow.user .chatmeta { text-align: right; }
+    #phelp-btn { position: fixed; right: 22px; bottom: 22px; z-index: 40; width: 50px; height: 50px; border-radius: 50%; background: #2563eb; color: #fff; border: none; font-size: 20px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 14px rgba(37,99,235,.45); }
+    #phelp-btn:hover { background: #1d4ed8; }
+    #phelp-panel { display: none; position: fixed; right: 22px; bottom: 84px; z-index: 41; width: 300px; max-height: 70vh; overflow-y: auto; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.18); padding: 14px; }
+    #phelp-panel.open { display: block; }
+    .phelp-head { display: flex; justify-content: space-between; align-items: center; font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+    .phelp-head .x { cursor: pointer; color: #6b7280; font-size: 18px; }
+    .phelp-hint { font-size: 11px; color: #6b7280; margin: 0 0 10px; }
+    .phelp-item { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 2px; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; cursor: pointer; }
+    .phelp-item:hover { background: #eff6ff; border-color: #bfdbfe; }
+    .phelp-item code { font-size: 13px; font-weight: 700; color: #2563eb; }
+    .phelp-item .d { font-size: 11px; color: #6b7280; }
+    .phelp-item.copied { background: #dcfce7; border-color: #86efac; }
+    .phelp-item.copied code { color: #166534; }
     .addbtn { font-size: 12px; border: 1px dashed #9ca3af; background: #f9fafb; color: #374151; border-radius: 7px; padding: 4px 10px; cursor: pointer; margin: 6px 8px 0 0; }
     .addbtn.yes { border-color: #059669; color: #059669; } .addbtn.no { border-color: #dc2626; color: #dc2626; }
     .editor { margin: 6px 0 4px; padding: 10px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; max-width: 560px; }
@@ -81,11 +96,11 @@
     .tnode .editor label { font-size: 12px; }
     .tnode .typerow { margin-top: 6px; font-size: 11px; color: #6b7280; }
     .tnode .typerow select { font-size: 11px; padding: 2px 6px; border-radius: 6px; border: 1px solid #d1d5db; }
-    .leadgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+    .leadgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; grid-template-areas: "csv search" "ai search"; }
     .formcard { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 0 16px 16px; }
     .formcard h2 { margin-top: 16px; }
     .formcard .editor { max-width: none; background: transparent; border: 0; padding: 0; }
-    @media (max-width: 900px) { .leadgrid { grid-template-columns: 1fr; } }
+    @media (max-width: 900px) { .leadgrid { grid-template-columns: 1fr; grid-template-areas: "csv" "search" "ai"; } }
     .editor button, .picker button { margin-top: 8px; background: #2563eb; color: #fff; border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer; }
     .picker { margin: 6px 0; padding: 8px; background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px; display: inline-block; }
     .hint { font-size: 12px; color: #6b7280; }
@@ -164,7 +179,7 @@
     </div>
     <div class="tab" id="tab-leads">
      <div class="leadgrid">
-      <div class="formcard">
+      <div class="formcard" style="grid-area:csv">
       <h2>Add leads from CSV</h2>
       <div class="editor">
         <label>List name</label><input id="csvname" placeholder="e.g. Q3 Founders">
@@ -173,7 +188,7 @@
         <button onclick="importCsv()">Import CSV</button>
       </div>
       </div>
-      <div class="formcard">
+      <div class="formcard" style="grid-area:search">
       <h2>Add leads from a LinkedIn search</h2>
       <div class="editor">
         <label>List name</label><input id="searchname" placeholder="e.g. Marketing Angel Investors">
@@ -200,7 +215,7 @@
         <label>…or paste a LinkedIn search URL</label><input id="searchq" placeholder="https://www.linkedin.com/search/results/people/?...">
       </div>
       </div>
-      <div class="formcard">
+      <div class="formcard" style="grid-area:ai">
       <h2>Find leads with AI</h2>
       <div class="editor">
         <label>List name</label><input id="ainame" placeholder="e.g. AI: fintech founders">
@@ -245,9 +260,24 @@
     </div>
 
     <div class="tab" id="tab-context">
+      <h2>AI settings — your own API key</h2>
+      <div class="editor" style="max-width:780px">
+        <p class="hint">This key powers AI lead scoring, search-keyword generation, and message personalisation. It's stored on your server and used only by your worker.</p>
+        <label>Provider</label>
+        <select id="ai_provider"></select>
+        <label>API key</label>
+        <input id="ai_key" type="password" autocomplete="off" placeholder="paste your key (e.g. sk-ant-…)">
+        <div class="hint" id="ai_key_state"></div>
+        <label>Model <span class="hint">(e.g. claude-sonnet-4-6, gpt-4o, gemini-1.5-pro)</span></label>
+        <input id="ai_model" placeholder="model id">
+        <label>API base URL <span class="hint">(only for OpenAI-compatible providers)</span></label>
+        <input id="ai_base" placeholder="https://… (leave blank for the standard provider)">
+        <div><button id="ai_save_btn" onclick="saveAiConfig()">Save AI settings</button> <span id="ai_saved" class="hint"></span></div>
+      </div>
+
       <h2>AI Context — what you sell &amp; your ideal lead</h2>
       <div class="editor" style="max-width:780px">
-        <p class="hint">Claude uses this to score every lead 0–100 for fit (shown in Leads/Campaigns), to generate AI searches, and to prioritise InMail. Be specific about Grantgunner and who is a great — or poor — lead.</p>
+        <p class="hint">The AI uses this to score every lead 0–100 for fit (shown in Leads/Campaigns), to generate AI searches, and to prioritise InMail. Be specific about Grantgunner and who is a great — or poor — lead.</p>
         <textarea id="ctxbox" rows="14" style="width:100%"></textarea>
         <div><button id="ctxbtn" onclick="saveContext()">Save context</button> <span id="ctxsaved" class="hint"></span></div>
       </div>
@@ -259,6 +289,14 @@
       <div class="mhead"><b id="chattitle">AI chat</b><span class="x" onclick="closeChat()">×</span></div>
       <div class="mbody" id="chatbody"></div>
     </div>
+  </div>
+
+  <!-- Floating placeholder helper (Flows tab) -->
+  <button id="phelp-btn" title="Personalisation tags" onclick="togglePHelp()" style="display:none">{ }</button>
+  <div id="phelp-panel">
+    <div class="phelp-head">Personalisation tags<span class="x" onclick="togglePHelp()">×</span></div>
+    <p class="phelp-hint">Click a tag to copy it, then paste into a message or InMail. It's filled in per-lead when the step sends.</p>
+    <div id="phelp-list"></div>
   </div>
 
   <script>
@@ -273,9 +311,12 @@
       const f = document.querySelector("#tab-"+id+" iframe"); if (f && !f.src) f.src = f.dataset.src;
       if (id === "leads") loadLeads();
       if (id === "unibox") loadInbox();
-      if (id === "context") loadContext();
+      if (id === "context") { loadContext(); loadAiConfig(); }
       if (id === "campaigns") loadCampaigns();
       if (id === "accounts") loadAccounts();
+      // The placeholder helper button is only relevant while editing a flow.
+      document.getElementById("phelp-btn").style.display = (id === "flows") ? "block" : "none";
+      if (id !== "flows") document.getElementById("phelp-panel").classList.remove("open");
     }
 
     function loadAccounts(){
@@ -384,6 +425,69 @@
       const ai_context = document.getElementById("ctxbox").value;
       j("api/context/save/", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ai_context})})
         .then(r => { document.getElementById("ctxsaved").textContent = r.ok ? "Saved ✓ — leads will be (re)scored by the worker." : "save failed"; });
+    };
+
+    // ---------- AI settings (provider + API key) ----------
+    function loadAiConfig(){
+      j("api/ai-config/").then(d => {
+        const sel = document.getElementById("ai_provider");
+        sel.innerHTML = d.providers.map(p => `<option value="${p.value}"${p.value===d.provider?" selected":""}>${p.label}</option>`).join("");
+        document.getElementById("ai_model").value = d.model || "";
+        document.getElementById("ai_base").value = d.api_base || "";
+        document.getElementById("ai_key").value = "";
+        document.getElementById("ai_key_state").textContent = d.key_set ? `A key is set (${d.key_hint}). Leave blank to keep it, or paste a new one to replace.` : "No key set yet.";
+      });
+    }
+    window.saveAiConfig = () => {
+      const body = {
+        provider: document.getElementById("ai_provider").value,
+        model: document.getElementById("ai_model").value,
+        api_base: document.getElementById("ai_base").value,
+        api_key: document.getElementById("ai_key").value,
+      };
+      j("api/ai-config/save/", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)})
+        .then(r => { document.getElementById("ai_saved").textContent = r.ok ? "Saved ✓" : (r.error||"save failed"); if(r.ok) loadAiConfig(); });
+    };
+
+    // ---------- Personalisation tag helper (Flows tab) ----------
+    const PLACEHOLDERS = [
+      ["{first_name}", "Lead's first name — e.g. Toby"],
+      ["{last_name}", "Lead's last name — e.g. Claxton"],
+      ["{company}", "Lead's company — e.g. Canvassr"],
+      ["{public_identifier}", "LinkedIn handle (URL slug) — e.g. toby-claxton"],
+    ];
+    function renderPHelp(){
+      document.getElementById("phelp-list").innerHTML = PLACEHOLDERS.map(([tag, desc], i) =>
+        `<button class="phelp-item" id="ph_${i}" onclick="copyTag(${i})"><code>${tag.replace(/</g,'&lt;')}</code><span class="d">${desc}</span></button>`
+      ).join("");
+    }
+    function copyToClipboard(text){
+      // navigator.clipboard needs a secure context (https/localhost); the dashboard
+      // is served over plain http on the tailnet, so fall back to execCommand.
+      if (navigator.clipboard && window.isSecureContext){
+        return navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+      }
+      return Promise.resolve(fallbackCopy(text));
+    }
+    function fallbackCopy(text){
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      try { document.execCommand("copy"); } catch(e) {}
+      document.body.removeChild(ta);
+    }
+    window.copyTag = (i) => {
+      const [tag] = PLACEHOLDERS[i];
+      copyToClipboard(tag);
+      const el = document.getElementById("ph_"+i);
+      const code = el.querySelector("code"); const orig = code.textContent;
+      el.classList.add("copied"); code.textContent = "Copied!";
+      setTimeout(() => { el.classList.remove("copied"); code.textContent = orig; }, 1000);
+    };
+    window.togglePHelp = () => {
+      const p = document.getElementById("phelp-panel");
+      if (!p.classList.contains("open")) renderPHelp();
+      p.classList.toggle("open");
     };
 
     let INBOX_ACCTS_LOADED = false, CUR_THREAD = null;
@@ -608,7 +712,7 @@
       const hasFields = (FIELDS[n.step_type] || []).length > 0;
       const typeSel = `<div class="typerow"><label>Step type:</label> <select onchange="changeType(${n.id}, this.value)">${STEP_TYPES.map(([v,l])=>`<option value="${v}"${v===n.step_type?" selected":""}>${l}</option>`).join("")}</select></div>`;
       return `<div class="tnode ${n.step_type}">
-        <div class="thd"><span class="ticon">${TICON[n.step_type]||"•"}</span><span>${TLABEL[n.step_type]||n.step_type}</span>${hasFields?`<span class="ed" onclick="toggleEd(${n.id})">edit</span>`:""}</div>
+        <div class="thd"><span class="ticon">${TICON[n.step_type]||"•"}</span><span>${TLABEL[n.step_type]||n.step_type}</span>${hasFields?`<span class="ed" onclick="toggleEd(${n.id})">edit</span>`:""}<span class="rm" onclick="deleteStep(${n.id})" title="Remove this step (the rest reconnects)">✕</span></div>
         ${sub?`<div class="tsub" title="${esc(sub)}">${esc(sub)}</div>`:""}
         ${typeSel}
         ${editor(n)}
@@ -617,8 +721,14 @@
     }
     function renderNode(n){
       // Returns a node's card plus its children as a nested <ul>; the caller wraps in <li>.
-      // An explicit End step is terminal — it IS the end marker, no children.
-      if (n.step_type === "end") return nodeCard(n);
+      // An explicit End stops the branch here at runtime, but the steps below it
+      // are KEPT (dormant) and shown greyed — remove the End to resume them.
+      if (n.step_type === "end") {
+        const kept = [...(n.success||[]), ...(n.failure||[])];
+        if (!kept.length) return nodeCard(n);
+        const lis = kept.map(c => `<li><div class="bchip neutral">paused · won't run</div>${renderNode(c)}</li>`).join("");
+        return `${nodeCard(n)}<ul class="paused">${lis}</ul>`;
+      }
       const lis = [];
       for (const [branch] of branchOpts(n.step_type)){
         const arr = branch==="success" ? n.success : n.failure;
@@ -650,6 +760,11 @@
     window.changeType = (id, step_type) => {
       j(`api/step/${id}/`, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({step_type})})
         .then(r => r.ok ? loadSeq(CUR) : alert(r.error||"couldn't change step type"));
+    };
+    window.deleteStep = (id) => {
+      if (!confirm("Remove this step? Anything after it stays and reconnects (use this to remove an End and resume the branch).")) return;
+      j(`api/step/${id}/delete/`, {method:"POST", headers:{"Content-Type":"application/json"}})
+        .then(r => r.ok ? loadSeq(CUR) : alert(r.error||"couldn't remove"));
     };
     window.createSeq = () => {
       const name = document.getElementById("newseqname").value || "New sequence";
