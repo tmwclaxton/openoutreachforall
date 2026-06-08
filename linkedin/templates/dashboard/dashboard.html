@@ -46,6 +46,7 @@
     .flowtree ul ul::before { content: ''; position: absolute; top: 0; left: 50%; border-left: 2px solid #cbd5e1; width: 0; height: 26px; }
     .tnode { display: inline-block; background: #fff; border: 1px solid #d1d5db; border-radius: 10px; padding: 10px 14px; font-size: 13px; min-width: 140px; box-shadow: 0 1px 2px rgba(0,0,0,.05); text-align: center; }
     .tnode.start { background: #111827; color: #fff; border-color: #111827; font-weight: 700; }
+    .tnode.end { background: #f1f5f9; color: #475569; border: 2px dashed #cbd5e1; min-width: 0; font-weight: 600; }
     .tnode .thd { display: flex; align-items: center; gap: 7px; justify-content: center; font-weight: 600; }
     .tnode .ticon { font-size: 15px; }
     .tnode .tsub { color: #6b7280; font-size: 11px; margin-top: 3px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -78,6 +79,8 @@
     .tnode .editor textarea { min-height: 200px; resize: vertical; font-size: 13px; line-height: 1.5; padding: 10px; transition: min-height .15s ease; }
     .tnode .editor textarea:focus { min-height: 340px; outline: 2px solid #bfdbfe; }
     .tnode .editor label { font-size: 12px; }
+    .tnode .typerow { margin-top: 6px; font-size: 11px; color: #6b7280; }
+    .tnode .typerow select { font-size: 11px; padding: 2px 6px; border-radius: 6px; border: 1px solid #d1d5db; }
     .leadgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
     .formcard { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 0 16px 16px; }
     .formcard h2 { margin-top: 16px; }
@@ -556,9 +559,9 @@
       document.querySelector("#senders tbody").innerHTML = d.senders.map(s=>`<tr><td>${s.username}</td><td>${s.active?"yes":"no"}</td><td>${s.has_inmail?"yes":"no"}</td><td>${c(s.usage,"connect")}</td><td>${c(s.usage,"message")}</td></tr>`).join("") || `<tr><td colspan="5">No senders — add one in Accounts.</td></tr>`; });
 
     // ---------- Flow builder ----------
-    const STEP_TYPES = [["connect","Send Connection Request"],["message","Send Message"],["inmail","Send InMail"],["wait","Wait"],["profile_visit","View Profile"],["like_post","Like Post"]];
+    const STEP_TYPES = [["connect","Send Connection Request"],["message","Send Message"],["inmail","Send InMail"],["wait","Wait"],["profile_visit","View Profile"],["like_post","Like Post"],["end","End — stop here"]];
     const FIELDS = { connect:[["personalised_note","Connection note","textarea"],["wait_days_before_branch_decision","Days to wait for acceptance","number"]], message:[["template","Message","textarea"]], inmail:[["subject","Subject","input"],["body","Body","textarea"]], wait:[["days","Wait days","number"]], profile_visit:[], like_post:[] };
-    function branchOpts(t){ if(t==="connect")return[["success","if accepted","yes"],["failure","if NOT accepted","no"]]; if(t==="message")return[["success","if replied","yes"],["failure","if no reply","no"]]; return[["success","then (next step)","yes"]]; }
+    function branchOpts(t){ if(t==="end")return[]; if(t==="connect")return[["success","if accepted","yes"],["failure","if NOT accepted","no"]]; if(t==="message")return[["success","if replied","yes"],["failure","if no reply","no"]]; return[["success","then (next step)","yes"]]; }
     let CUR = null;
 
     function typePicker(parentId, branch){
@@ -583,8 +586,8 @@
         return `<label>${l}</label>${el}`; }).join("");
       return `<div class="editor" data-step="${n.id}" style="display:none">${inputs}<button onclick="saveStep(${n.id})">Save</button></div>`;
     }
-    const TICON = { connect:"🤝", message:"✉️", inmail:"📨", wait:"⏱️", profile_visit:"👁️", like_post:"👍" };
-    const TLABEL = { connect:"Send connection request", message:"Send message", inmail:"Send InMail", wait:"Wait", profile_visit:"View profile", like_post:"Like post" };
+    const TICON = { connect:"🤝", message:"✉️", inmail:"📨", wait:"⏱️", profile_visit:"👁️", like_post:"👍", end:"⚑" };
+    const TLABEL = { connect:"Send connection request", message:"Send message", inmail:"Send InMail", wait:"Wait", profile_visit:"View profile", like_post:"Like post", end:"End" };
     function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;"); }
     function subLabel(n){
       const c = n.config || {};
@@ -592,6 +595,7 @@
       if (n.step_type==="message") return (c.template||"").trim().slice(0,42) || "no text yet";
       if (n.step_type==="inmail") return (c.subject||"").trim().slice(0,42) || "no subject yet";
       if (n.step_type==="connect"){ const d=Number(c.wait_days_before_branch_decision||14); return `decide after ${d} days`; }
+      if (n.step_type==="end") return "sequence stops here";
       return "";
     }
     function condLabel(type, branch){
@@ -601,15 +605,20 @@
     }
     function nodeCard(n){
       const sub = subLabel(n);
+      const hasFields = (FIELDS[n.step_type] || []).length > 0;
+      const typeSel = `<div class="typerow"><label>Step type:</label> <select onchange="changeType(${n.id}, this.value)">${STEP_TYPES.map(([v,l])=>`<option value="${v}"${v===n.step_type?" selected":""}>${l}</option>`).join("")}</select></div>`;
       return `<div class="tnode ${n.step_type}">
-        <div class="thd"><span class="ticon">${TICON[n.step_type]||"•"}</span><span>${TLABEL[n.step_type]||n.step_type}</span><span class="ed" onclick="toggleEd(${n.id})">edit</span></div>
+        <div class="thd"><span class="ticon">${TICON[n.step_type]||"•"}</span><span>${TLABEL[n.step_type]||n.step_type}</span>${hasFields?`<span class="ed" onclick="toggleEd(${n.id})">edit</span>`:""}</div>
         ${sub?`<div class="tsub" title="${esc(sub)}">${esc(sub)}</div>`:""}
+        ${typeSel}
         ${editor(n)}
         <div class="addrow">${addControls(n)}</div>
       </div>`;
     }
     function renderNode(n){
       // Returns a node's card plus its children as a nested <ul>; the caller wraps in <li>.
+      // An explicit End step is terminal — it IS the end marker, no children.
+      if (n.step_type === "end") return nodeCard(n);
       const lis = [];
       for (const [branch] of branchOpts(n.step_type)){
         const arr = branch==="success" ? n.success : n.failure;
@@ -637,6 +646,10 @@
       const ed = document.querySelector(`.editor[data-step="${id}"]`); const cfg={};
       ed.querySelectorAll("[data-k]").forEach(el => { let v=el.value; if(el.type==="number") v = v===""?0:Number(v); cfg[el.dataset.k]=v; });
       j(`api/step/${id}/`, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({config: cfg})}).then(r => r.ok ? loadSeq(CUR) : alert(r.error||"save failed"));
+    };
+    window.changeType = (id, step_type) => {
+      j(`api/step/${id}/`, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({step_type})})
+        .then(r => r.ok ? loadSeq(CUR) : alert(r.error||"couldn't change step type"));
     };
     window.createSeq = () => {
       const name = document.getElementById("newseqname").value || "New sequence";

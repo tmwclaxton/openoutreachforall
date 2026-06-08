@@ -126,7 +126,18 @@ def poll_replies(session, campaign=None) -> int:
 
         inbound_reply = False
         latest_ts = thread.last_message_at
+        # Unibox gate: an outbound message dated at/after we enrolled this lead is
+        # us contacting them — as opposed to the account's pre-existing LinkedIn
+        # conversations (from other tools), which pre-date enrollment.
+        our_outbound = thread.contacted_by_tool
         for m in messages:
+            if (
+                m["direction"] == "out"
+                and m["sent_at"]
+                and state.created_at
+                and m["sent_at"] >= state.created_at
+            ):
+                our_outbound = True
             Message.objects.get_or_create(
                 thread=thread,
                 linkedin_message_id=m["linkedin_message_id"],
@@ -155,6 +166,8 @@ def poll_replies(session, campaign=None) -> int:
         thread.last_message_at = latest_ts
         if inbound_reply:
             thread.has_inbound_reply = True
+        if our_outbound:
+            thread.contacted_by_tool = True
         thread.save()
 
         if inbound_reply and state.state == State.ACTIVE:

@@ -357,6 +357,7 @@ class SequenceStep(models.Model):
         WAIT = "wait", "Wait"
         PROFILE_VISIT = "profile_visit", "View Profile"
         LIKE_POST = "like_post", "Like Post"
+        END = "end", "End — stop here"
 
     sequence = models.ForeignKey(Sequence, on_delete=models.CASCADE, related_name="steps")
     parent = models.ForeignKey(
@@ -429,6 +430,10 @@ class MessageThread(models.Model):
     last_polled_at = models.DateTimeField(null=True, blank=True)
     last_message_at = models.DateTimeField(null=True, blank=True)
     has_inbound_reply = models.BooleanField(default=False)
+    # True once THIS tool has actually messaged the lead (sequence or manual
+    # Unibox send). The Unibox only surfaces threads we initiated — never the
+    # account's pre-existing LinkedIn conversations from other tools.
+    contacted_by_tool = models.BooleanField(default=False)
     read_at = models.DateTimeField(null=True, blank=True)  # null = unread (M5)
     created_at = models.DateTimeField(default=timezone.now)
 

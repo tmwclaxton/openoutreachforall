@@ -97,7 +97,9 @@ def api_context_save(request):
 @staff_member_required
 @require_POST
 def api_update_step(request, step_id):
-    """Edit a sequence step's config (the in-dashboard flow editor)."""
+    """Edit a sequence step: change its config, and/or change what the step
+    actually IS (its ``step_type``). Changing type resets the config to that
+    type's defaults (unless a config is supplied)."""
     from linkedin.models import SequenceStep
 
     step = SequenceStep.objects.filter(pk=step_id).first()
@@ -107,12 +109,39 @@ def api_update_step(request, step_id):
         payload = json.loads(request.body or "{}")
     except ValueError:
         return JsonResponse({"error": "bad json"}, status=400)
+
+    new_type = payload.get("step_type")
     new_config = payload.get("config")
-    if not isinstance(new_config, dict):
+    if new_type is None and not isinstance(new_config, dict):
         return JsonResponse({"error": "config must be an object"}, status=400)
-    step.config = new_config
-    step.save(update_fields=["config"])
-    return JsonResponse({"ok": True, "config": step.config})
+
+    fields = []
+    if new_type is not None:
+        if new_type not in SequenceStep.StepType.values:
+            return JsonResponse({"error": "bad step_type"}, status=400)
+        # Branch-arity safety: only connect/message carry a 'no' (failure) branch.
+        # Refuse a change that would orphan an existing failure branch.
+        branching = {SequenceStep.StepType.CONNECT, SequenceStep.StepType.MESSAGE}
+        if new_type not in branching and step.children.filter(branch=SequenceStep.Branch.FAILURE).exists():
+            return JsonResponse(
+                {"error": "This step has a 'No reply / Not accepted' branch. Change it to "
+                          "Send message or Send connection request, or remove that branch first."},
+                status=400,
+            )
+        if new_type == SequenceStep.StepType.END and step.children.exists():
+            return JsonResponse({"error": "End can't have steps after it — remove them first."}, status=400)
+        step.step_type = new_type
+        fields.append("step_type")
+        if not isinstance(new_config, dict):
+            step.config = dict(_STEP_DEFAULTS.get(new_type, {}))
+            fields.append("config")
+
+    if isinstance(new_config, dict):
+        step.config = new_config
+        fields.append("config")
+
+    step.save(update_fields=fields)
+    return JsonResponse({"ok": True, "step_type": step.step_type, "config": step.config})
 
 
 def _lead_name(lead):
@@ -377,7 +406,9 @@ def api_inbox_threads(request):
     # Conversations with at least one MESSAGE (excludes connection-request-only
     # threads). filter: all | replied (has inbound) | sent (outbound, no reply yet).
     f = request.GET.get("filter", "replied")
-    base = MessageThread.objects.filter(messages__isnull=False)
+    # Only threads THIS tool actually started — never the account's pre-existing
+    # LinkedIn conversations from other tools.
+    base = MessageThread.objects.filter(contacted_by_tool=True, messages__isnull=False)
     if f == "replied":
         base = base.filter(messages__direction="in")
     elif f == "sent":
@@ -615,7 +646,8 @@ def api_inbox_send(request, thread_id):
         sender_account=t.account, linkedin_message_id=mid, sent_at=timezone.now(),
     )
     t.last_message_at = timezone.now()
-    t.save(update_fields=["last_message_at"])
+    t.contacted_by_tool = True  # a manual reply is us contacting them
+    t.save(update_fields=["last_message_at", "contacted_by_tool"])
     return JsonResponse({"ok": True, "queued": True})
 
 
@@ -658,6 +690,7 @@ _STEP_DEFAULTS = {
     "wait": {"days": 2},
     "profile_visit": {},
     "like_post": {},
+    "end": {},
 }
 
 
@@ -714,6 +747,8 @@ def api_create_step(request, sequence_id):
     # before it: the new step takes the slot and the old child re-parents onto
     # the new step's success branch (linear continuation).
     existing = SequenceStep.objects.filter(sequence=seq, parent=parent, branch=branch).first()
+    if step_type == SequenceStep.StepType.END and existing:
+        return JsonResponse({"error": "End can only be added where the path currently stops"}, status=400)
     step = SequenceStep.objects.create(
         sequence=seq, parent=parent, branch=branch, step_type=step_type,
         config=_STEP_DEFAULTS.get(step_type, {}), order_in_branch=0,

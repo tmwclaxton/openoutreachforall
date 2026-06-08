@@ -35,6 +35,18 @@ def busy_lead_ids(exclude_campaign=None) -> set:
     return set(qs.values_list("lead_id", flat=True))
 
 
+def contacted_lead_ids(exclude_campaign=None) -> set:
+    """Lead ids that have EVER been enrolled in a campaign — any state, including
+    completed/replied/archived. A person we've already worked must never be
+    re-contacted by another campaign, even if they resurface in a new search or
+    lead list. (A lead row is unique per person — dedup by public_identifier at
+    import — so this is the cross-campaign contact guard.)"""
+    qs = LeadCampaignState.objects.all()
+    if exclude_campaign is not None:
+        qs = qs.exclude(campaign=exclude_campaign)
+    return set(qs.values_list("lead_id", flat=True))
+
+
 def enroll_leads(campaign, leads) -> dict:
     """Create ACTIVE states (due now, at the sequence root) for each lead in
     ``leads`` not already enrolled here OR live in another campaign. Idempotent.
@@ -49,14 +61,16 @@ def enroll_leads(campaign, leads) -> dict:
     existing = set(
         LeadCampaignState.objects.filter(campaign=campaign).values_list("lead_id", flat=True)
     )
-    busy = busy_lead_ids(exclude_campaign=campaign)
+    # Anyone already enrolled in ANY other campaign (any state, ever) is off-limits:
+    # we contact each person at most once across all campaigns.
+    contacted = contacted_lead_ids(exclude_campaign=campaign)
     created = 0
     skipped = 0
     for lead in leads:
         if lead.pk in existing:
             continue
-        if lead.pk in busy:
-            skipped += 1  # already live in another campaign — don't double-contact
+        if lead.pk in contacted:
+            skipped += 1  # already worked by another campaign — never double-contact
             continue
         LeadCampaignState.objects.create(
             lead=lead,
@@ -170,8 +184,8 @@ def advance_state(session, state) -> None:
     if handler is None:
         raise ValueError(f"Unknown step_type {step.step_type!r}")
     # Browser actions assume a live page; ensure it (idempotent) for any
-    # non-wait step, since the page is launched lazily.
-    if step.step_type != SequenceStep.StepType.WAIT:
+    # step that touches LinkedIn (wait/end don't).
+    if step.step_type not in (SequenceStep.StepType.WAIT, SequenceStep.StepType.END):
         session.ensure_browser()
     handler(session, state, step)
 
@@ -196,8 +210,20 @@ def _handle_connect(session, state, step):
     _goto(state, step.next_step(branch))
 
 
+def _mark_contacted(session, state):
+    """Record that THIS tool messaged the lead — gates the Unibox so it never
+    shows the account's pre-existing (e.g. other-tool) LinkedIn conversations."""
+    from linkedin.models import MessageThread
+
+    MessageThread.objects.update_or_create(
+        lead=state.lead, account=session.linkedin_profile,
+        defaults={"contacted_by_tool": True},
+    )
+
+
 def _handle_message(session, state, step):
     send_message(session, state, step)
+    _mark_contacted(session, state)
     _log(session, state, step, ActionLog.ActionType.MESSAGE)
     # Continue down the no-reply (failure) branch; M3 reply detection halts on reply.
     _goto(state, step.next_step(Branch.FAILURE))
@@ -211,6 +237,7 @@ def _handle_inmail(session, state, step):
         return
     result = send_inmail(session, state, step)
     if result.get("success"):
+        _mark_contacted(session, state)
         _log(session, state, step, ActionLog.ActionType.INMAIL)
     else:
         logger.info("InMail not sent for %s (%s) — continuing", state, result.get("error"))
@@ -220,6 +247,11 @@ def _handle_inmail(session, state, step):
 def _handle_wait(session, state, step):
     days = int(step.config.get("days", 0))
     _goto(state, step.next_step(Branch.SUCCESS), delay=timedelta(days=days))
+
+
+def _handle_end(session, state, step):
+    # Explicit terminal step — the lead has reached the end of this branch.
+    _complete(state)
 
 
 def _handle_profile_visit(session, state, step):
@@ -241,6 +273,7 @@ _HANDLERS = {
     SequenceStep.StepType.WAIT: _handle_wait,
     SequenceStep.StepType.PROFILE_VISIT: _handle_profile_visit,
     SequenceStep.StepType.LIKE_POST: _handle_like_post,
+    SequenceStep.StepType.END: _handle_end,
 }
 
 
