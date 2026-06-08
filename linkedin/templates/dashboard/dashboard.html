@@ -97,9 +97,9 @@
       let h = "";
       for (const [branch,label,cls] of branchOpts(n.step_type)){
         const has = branch==="success" ? n.success.length : n.failure.length;
-        if (has) continue;
         const pid = "p_"+n.id+"_"+branch;
-        h += `<button class="addbtn ${cls}" onclick="togglePicker('${pid}')">+ ${label}</button>${typePicker(n.id, branch)}`;
+        const verb = has ? "↳ insert step," : "+ add,";   // insert before existing next-step, or append
+        h += `<button class="addbtn ${cls}" onclick="togglePicker('${pid}')">${verb} ${label}</button>${typePicker(n.id, branch)}`;
       }
       return h;
     }

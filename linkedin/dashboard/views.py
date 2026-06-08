@@ -84,14 +84,19 @@ def api_create_step(request, sequence_id):
     parent = None
     if payload.get("parent_id"):
         parent = SequenceStep.objects.filter(pk=payload["parent_id"], sequence=seq).first()
-    # One child per (parent, branch) — reject duplicates so the tree stays clean.
-    if SequenceStep.objects.filter(sequence=seq, parent=parent, branch=branch).exists():
-        return JsonResponse({"error": "branch already has a step"}, status=400)
+    # If this (parent, branch) slot already holds a step, INSERT the new step
+    # before it: the new step takes the slot and the old child re-parents onto
+    # the new step's success branch (linear continuation).
+    existing = SequenceStep.objects.filter(sequence=seq, parent=parent, branch=branch).first()
     step = SequenceStep.objects.create(
         sequence=seq, parent=parent, branch=branch, step_type=step_type,
         config=_STEP_DEFAULTS.get(step_type, {}), order_in_branch=0,
     )
-    return JsonResponse({"id": step.pk})
+    if existing:
+        existing.parent = step
+        existing.branch = SequenceStep.Branch.SUCCESS
+        existing.save(update_fields=["parent", "branch"])
+    return JsonResponse({"id": step.pk, "inserted_before": existing.pk if existing else None})
 
 
 @staff_member_required

@@ -106,6 +106,28 @@ class TestDashboardApi:
         assert connect.next_step(SequenceStep.Branch.SUCCESS).step_type == "message"
         assert connect.next_step(SequenceStep.Branch.FAILURE).step_type == "inmail"
 
+    def test_insert_step_mid_chain(self, admin_client):
+        import json
+
+        from linkedin.models import Sequence, SequenceStep
+        from tests.factories import UserFactory
+
+        seq = Sequence.objects.create(name="I", owner=UserFactory())
+        root = SequenceStep.objects.create(sequence=seq, branch=SequenceStep.Branch.ROOT, step_type=SequenceStep.StepType.CONNECT)
+        child = SequenceStep.objects.create(sequence=seq, parent=root, branch=SequenceStep.Branch.SUCCESS, step_type=SequenceStep.StepType.MESSAGE)
+
+        # Insert a like_post between root and its existing success child.
+        admin_client.post(
+            f"/dashboard/api/sequence/{seq.pk}/step/",
+            data=json.dumps({"parent_id": root.pk, "branch": "success", "step_type": "like_post"}),
+            content_type="application/json",
+        )
+        inserted = root.next_step(SequenceStep.Branch.SUCCESS)
+        child.refresh_from_db()
+        assert inserted.step_type == "like_post"
+        assert child.parent_id == inserted.pk
+        assert child.branch == SequenceStep.Branch.SUCCESS
+
     def test_update_step_config(self, admin_client):
         import json
 
