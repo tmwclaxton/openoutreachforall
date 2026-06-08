@@ -20,6 +20,7 @@ urlpatterns = [
     path("api/sequence/<int:sequence_id>/step/", views.api_create_step, name="dashboard_api_create_step"),
     path("api/sequence/<int:sequence_id>/archive/", views.api_sequence_archive, name="dashboard_api_sequence_archive"),
     path("api/sequence/<int:sequence_id>/rename/", views.api_sequence_rename, name="dashboard_api_sequence_rename"),
+    path("api/sequence/<int:sequence_id>/duplicate/", views.api_sequence_duplicate, name="dashboard_api_sequence_duplicate"),
     path("api/leads/", views.api_leads, name="dashboard_api_leads"),
     path("api/leads/csv/", views.api_leads_csv, name="dashboard_api_leads_csv"),
     path("api/leads/search/", views.api_leads_search, name="dashboard_api_leads_search"),

@@ -151,6 +151,7 @@
         <input id="newseqname" placeholder="New sequence name">
         <button class="addbtn" onclick="createSeq()">+ Create sequence</button>
         <button class="addbtn" onclick="renameSeq()" title="Rename this sequence">✎ Rename</button>
+        <button class="addbtn" onclick="duplicateSeq()" title="Duplicate this sequence">⧉ Duplicate</button>
         <button class="addbtn no" onclick="deleteSeq()" title="Archive this sequence">🗑 Delete sequence</button>
       </div>
       <p class="hint">The flow runs top to bottom. After each step it branches: a green <b>Accepted / Replied</b> pill is the yes-path, a red <b>Not accepted / No reply</b> pill is the no-path. Click <b>edit</b> on any box to change its message — use <code>{first_name}</code>.</p>
@@ -805,6 +806,11 @@
       if (!name) return;
       j(`api/sequence/${CUR}/rename/`, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({name})})
         .then(r => { if(r.ok) refreshSeqs(CUR); else alert(r.error||"failed"); });
+    };
+    window.duplicateSeq = () => {
+      if (!CUR) { alert("Pick a sequence first"); return; }
+      j(`api/sequence/${CUR}/duplicate/`, {method:"POST", headers:{"Content-Type":"application/json"}})
+        .then(r => { if(r.id) refreshSeqs(r.id); else alert(r.error||"failed"); });
     };
     window.deleteSeq = () => {
       if (!CUR) { alert("Pick a sequence first"); return; }

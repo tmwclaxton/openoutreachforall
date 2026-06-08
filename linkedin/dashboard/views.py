@@ -801,6 +801,33 @@ def api_sequence_archive(request, sequence_id):
 @csrf_exempt
 @staff_member_required
 @require_POST
+def api_sequence_duplicate(request, sequence_id):
+    """Deep-copy a sequence (name + full step tree) into a new one."""
+    from linkedin.models import Sequence, SequenceStep
+
+    src = Sequence.objects.filter(pk=sequence_id).first()
+    if not src:
+        return JsonResponse({"error": "not found"}, status=404)
+    new = Sequence.objects.create(name=f"{src.name} (copy)"[:200], owner=src.owner)
+
+    def copy_subtree(src_step, new_parent):
+        clone = SequenceStep.objects.create(
+            sequence=new, parent=new_parent, branch=src_step.branch,
+            step_type=src_step.step_type, config=dict(src_step.config or {}),
+            order_in_branch=src_step.order_in_branch,
+        )
+        for child in src_step.children.all().order_by("branch", "order_in_branch"):
+            copy_subtree(child, clone)
+
+    root = src.root_step
+    if root:
+        copy_subtree(root, None)
+    return JsonResponse({"ok": True, "id": new.pk})
+
+
+@csrf_exempt
+@staff_member_required
+@require_POST
 def api_sequence_rename(request, sequence_id):
     from linkedin.models import Sequence
 
