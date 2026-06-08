@@ -451,6 +451,23 @@ def api_sequence_archive(request, sequence_id):
 @csrf_exempt
 @staff_member_required
 @require_POST
+def api_sequence_rename(request, sequence_id):
+    from linkedin.models import Sequence
+
+    seq = Sequence.objects.filter(pk=sequence_id).first()
+    if not seq:
+        return JsonResponse({"error": "not found"}, status=404)
+    name = (json.loads(request.body or "{}").get("name") or "").strip()
+    if not name:
+        return JsonResponse({"error": "name required"}, status=400)
+    seq.name = name[:200]
+    seq.save(update_fields=["name"])
+    return JsonResponse({"ok": True})
+
+
+@csrf_exempt
+@staff_member_required
+@require_POST
 def api_create_step(request, sequence_id):
     from linkedin.models import Sequence, SequenceStep
 

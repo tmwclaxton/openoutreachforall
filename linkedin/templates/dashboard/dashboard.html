@@ -69,6 +69,7 @@
         <select id="seqpick"></select>
         <input id="newseqname" placeholder="New sequence name">
         <button class="addbtn" onclick="createSeq()">+ Create sequence</button>
+        <button class="addbtn" onclick="renameSeq()" title="Rename this sequence">✎ Rename</button>
         <button class="addbtn no" onclick="deleteSeq()" title="Archive this sequence">🗑 Delete sequence</button>
       </div>
       <p class="hint">Build the flow: each step branches. Green = <b>if YES</b> (accepted / replied), red = <b>if NO</b> (not accepted / no reply). Click a step to edit its message — use <code>{first_name}</code>.</p>
@@ -386,6 +387,13 @@
     window.createSeq = () => {
       const name = document.getElementById("newseqname").value || "New sequence";
       j("api/sequences/create/", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({name})}).then(r => refreshSeqs(r.id));
+    };
+    window.renameSeq = () => {
+      if (!CUR) { alert("Pick a sequence first"); return; }
+      const name = prompt("New sequence name:");
+      if (!name) return;
+      j(`api/sequence/${CUR}/rename/`, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({name})})
+        .then(r => { if(r.ok) refreshSeqs(CUR); else alert(r.error||"failed"); });
     };
     window.deleteSeq = () => {
       if (!CUR) { alert("Pick a sequence first"); return; }
