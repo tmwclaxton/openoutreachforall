@@ -104,8 +104,14 @@ def poll_replies(session, campaign=None) -> int:
             )
             if m["sent_at"] and (latest_ts is None or m["sent_at"] > latest_ts):
                 latest_ts = m["sent_at"]
-            if m["direction"] == "in" and (
-                state.last_action_at is None or (m["sent_at"] and m["sent_at"] > state.last_action_at)
+            # A reply only counts once we've actually acted (sent something) and
+            # the inbound message post-dates that action — otherwise historical
+            # messages would stop a sequence before it even starts.
+            if (
+                m["direction"] == "in"
+                and state.last_action_at
+                and m["sent_at"]
+                and m["sent_at"] > state.last_action_at
             ):
                 inbound_reply = True
 
