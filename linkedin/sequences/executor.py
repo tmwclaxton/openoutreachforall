@@ -308,4 +308,6 @@ def visit_profile(session, state):
 
 
 def like_recent_post(session, state):
-    logger.info("like_recent_post for %s (best-effort, no-op stub for M2)", state)
+    from linkedin.actions.like import like_most_recent_post
+
+    return like_most_recent_post(session, state.lead)
