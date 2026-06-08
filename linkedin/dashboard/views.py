@@ -70,7 +70,13 @@ def api_inbox_threads(request):
     from linkedin.models import MessageThread
 
     account = request.GET.get("account")
-    qs = MessageThread.objects.select_related("lead", "account").order_by("-last_message_at", "-created_at")
+    # Only conversations where the lead has actually replied (an inbound message).
+    qs = (
+        MessageThread.objects.filter(messages__direction="in")
+        .distinct()
+        .select_related("lead", "account")
+        .order_by("-last_message_at", "-created_at")
+    )
     if account:
         qs = qs.filter(account_id=account)
 
@@ -80,6 +86,7 @@ def api_inbox_threads(request):
         threads.append({
             "id": t.pk,
             "lead_name": _lead_name(t.lead),
+            "lead_url": t.lead.linkedin_url,
             "account_id": t.account_id,
             "account_name": t.account.linkedin_username if t.account else "",
             "last_message": (last.body[:90] if last and last.body else ""),
@@ -109,6 +116,7 @@ def api_inbox_thread(request, thread_id):
     return JsonResponse({
         "id": t.pk,
         "lead_name": _lead_name(t.lead),
+        "lead_url": t.lead.linkedin_url,
         "account_name": t.account.linkedin_username if t.account else "",
         "messages": msgs,
     })

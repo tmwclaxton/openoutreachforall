@@ -162,7 +162,8 @@
       CUR_THREAD = id;
       j(`api/inbox/thread/${id}/`).then(t => {
         document.getElementById("convo").innerHTML =
-          `<div class="convohead">${t.lead_name} <span class="acctbadge">via ${t.account_name}</span></div>` +
+          `<div class="convohead">${t.lead_name} <span class="acctbadge">via ${t.account_name}</span>` +
+          (t.lead_url ? ` <a href="${t.lead_url}" target="_blank" style="font-size:12px;font-weight:400;margin-left:8px">↗ View on LinkedIn</a>` : "") + `</div>` +
           t.messages.map(m => `<div class="msg ${m.direction}"><div class="who">${m.direction==="out"?("You ("+t.account_name+")"):t.lead_name}</div>${(m.body||"").replace(/</g,"&lt;")}</div>`).join("");
         loadThreads();
       });
