@@ -82,7 +82,9 @@ def due_states(campaign=None):
     )
     if campaign is not None:
         qs = qs.filter(campaign=campaign)
-    return qs.select_related("current_step", "lead", "campaign")
+    # Highest AI fit first, so capped actions (esp. the ~15/mo InMails) are
+    # spent on the best candidates.
+    return qs.select_related("current_step", "lead", "campaign").order_by("-lead__ai_score")
 
 
 def run_due_states(session, campaign=None, limit=None) -> int:
@@ -169,6 +171,11 @@ def _handle_message(session, state, step):
 
 
 def _handle_inmail(session, state, step):
+    # Don't spend a precious InMail on someone who connected during the wait.
+    if is_connection_accepted(session, state):
+        logger.info("Lead %s connected before InMail — skipping InMail", state.lead_id)
+        _goto(state, step.next_step(Branch.SUCCESS))
+        return
     result = send_inmail(session, state, step)
     if result.get("success"):
         _log(session, state, step, ActionLog.ActionType.INMAIL)
