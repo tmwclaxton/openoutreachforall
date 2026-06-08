@@ -142,24 +142,49 @@ def api_leads_csv(request):
     return JsonResponse({"ok": True, "list_id": ll.pk, **result})
 
 
+def _build_search_url(filters: dict) -> str:
+    """Build a LinkedIn people-search URL from free-text filters. Entity filters
+    (specific company/school/location/industry URNs) aren't resolvable without
+    LinkedIn's typeahead — use a pasted URL for those.
+    """
+    from urllib.parse import urlencode
+
+    params = {}
+    for key in ("keywords", "firstName", "lastName", "title", "company", "school"):
+        val = (filters.get(key) or "").strip()
+        if val:
+            params[key] = val
+    network = [n for n in (filters.get("network") or []) if n in ("F", "S", "O")]
+    if network:
+        params["network"] = json.dumps(network, separators=(",", ":"))
+    lang = (filters.get("language") or "").strip()
+    if lang:
+        params["profileLanguage"] = lang
+    return "https://www.linkedin.com/search/results/people/?" + urlencode(params)
+
+
 @csrf_exempt
 @staff_member_required
 @require_POST
 def api_leads_search(request):
-    """Queue a LinkedIn people search (URL or keyword). The browser worker
-    scrapes it on its next cycle (one process owns the LinkedIn session).
+    """Queue a LinkedIn people search (filters, URL, or keyword). The browser
+    worker scrapes it on its next cycle (one process owns the LinkedIn session).
     """
     from linkedin.leads import importer
     from linkedin.models import LeadList
 
     payload = json.loads(request.body or "{}")
     name = (payload.get("name") or "Search import").strip()
+    filters = payload.get("filters")
     query = (payload.get("query") or "").strip()
-    if not query:
-        return JsonResponse({"error": "query required"}, status=400)
-    url = query if query.startswith("http") else (
-        "https://www.linkedin.com/search/results/people/?keywords=" + quote(query)
-    )
+    if filters:
+        url = _build_search_url(filters)
+    elif query:
+        url = query if query.startswith("http") else (
+            "https://www.linkedin.com/search/results/people/?keywords=" + quote(query)
+        )
+    else:
+        return JsonResponse({"error": "filters or query required"}, status=400)
     ll = importer.create_lead_list(
         name=name, owner=request.user, source_type=LeadList.SourceType.SEARCH_URL, source_url=url,
     )

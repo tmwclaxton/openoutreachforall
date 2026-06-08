@@ -91,11 +91,29 @@
         <button onclick="importCsv()">Import CSV</button>
       </div>
       <h2>Add leads from a LinkedIn search</h2>
-      <div class="editor" style="max-width:680px">
-        <label>List name</label><input id="searchname" placeholder="e.g. London CTOs">
-        <label>Search URL or keywords</label><input id="searchq" placeholder="paste a people-search URL, or type keywords">
-        <button id="searchbtn" onclick="runSearch()">Run search &amp; import</button>
-        <div class="hint">Scrapes LinkedIn live (up to ~1 min). Results become a lead list you can attach to a campaign.</div>
+      <div class="editor" style="max-width:720px">
+        <label>List name</label><input id="searchname" placeholder="e.g. Marketing Angel Investors">
+        <label>Keywords</label><input id="f_keywords" placeholder="e.g. marketing angel investor">
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div style="flex:1"><label>First name</label><input id="f_firstName"></div>
+          <div style="flex:1"><label>Last name</label><input id="f_lastName"></div>
+          <div style="flex:1"><label>Title</label><input id="f_title"></div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div style="flex:1"><label>Company (keyword)</label><input id="f_company"></div>
+          <div style="flex:1"><label>School (keyword)</label><input id="f_school"></div>
+        </div>
+        <label>Connection degree</label>
+        <div style="font-size:13px">
+          <label style="display:inline"><input type="checkbox" id="f_F" value="F"> 1st</label>
+          <label style="display:inline"><input type="checkbox" id="f_S" value="S" checked> 2nd</label>
+          <label style="display:inline"><input type="checkbox" id="f_O" value="O" checked> 3rd+</label>
+        </div>
+        <label>Profile language</label>
+        <select id="f_language"><option value="">Any</option><option value="en">English</option><option value="de">German</option><option value="fr">French</option><option value="es">Spanish</option><option value="pt">Portuguese</option></select>
+        <div><button id="searchbtn" onclick="runSearch()">Run search &amp; import</button></div>
+        <div class="hint">Free-text filters above build the search. For exact company / school / location / industry (LinkedIn typeahead), build it in LinkedIn and paste the URL:</div>
+        <label>…or paste a LinkedIn search URL</label><input id="searchq" placeholder="https://www.linkedin.com/search/results/people/?...">
       </div>
       <h2>Lead lists <span class="hint">(attach one to a campaign in the Campaigns tab)</span></h2>
       <table id="leadlists"><thead><tr><th>Name</th><th>Source</th><th>Leads</th><th>Export</th></tr></thead><tbody></tbody></table>
@@ -163,13 +181,24 @@
       j("api/leads/csv/", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({name, csv_text})})
         .then(r => { if(r.ok){ alert(`Imported: ${r.created} created, ${r.skipped} skipped, ${r.invalid} invalid`); loadLeads(); } else alert(r.error||"failed"); });
     };
+    function gv(id){ return document.getElementById(id).value; }
     window.runSearch = () => {
       const name = document.getElementById("searchname").value;
-      const query = document.getElementById("searchq").value;
-      if(!query){ alert("Enter a search URL or keywords"); return; }
-      const btn = document.getElementById("searchbtn"); btn.textContent = "Searching… (up to ~1 min)"; btn.disabled = true;
-      j("api/leads/search/", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({name, query})})
-        .then(r => { btn.textContent = "Run search & import"; btn.disabled = false; if(r.ok){ alert(`Imported ${r.created} new leads (scraped ${r.scraped})`); loadLeads(); } else alert(r.error||"search failed"); });
+      const url = document.getElementById("searchq").value.trim();
+      let body;
+      if (url) {
+        body = { name, query: url };
+      } else {
+        const network = ["F","S","O"].filter(n => document.getElementById("f_"+n).checked);
+        body = { name, filters: {
+          keywords: gv("f_keywords"), firstName: gv("f_firstName"), lastName: gv("f_lastName"),
+          title: gv("f_title"), company: gv("f_company"), school: gv("f_school"),
+          language: gv("f_language"), network,
+        }};
+      }
+      const btn = document.getElementById("searchbtn"); btn.textContent = "Queued — worker scraping…"; btn.disabled = true;
+      j("api/leads/search/", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)})
+        .then(r => { btn.textContent = "Run search & import"; btn.disabled = false; if(r.ok){ alert("Search queued — leads will appear in the list below within ~2 min. Hit refresh."); loadLeads(); } else alert(r.error||"search failed"); });
     };
 
     const KPI = { connection_requests:"Connection Requests", messages_sent:"Messages Sent", inmails_sent:"InMails Sent", replies:"Replies", active:"Active", completed:"Completed" };
