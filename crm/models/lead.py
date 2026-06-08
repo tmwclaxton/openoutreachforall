@@ -21,6 +21,8 @@ class Lead(models.Model):
     first_name = models.CharField(max_length=120, blank=True, default="")
     last_name = models.CharField(max_length=120, blank=True, default="")
     company = models.CharField(max_length=200, blank=True, default="")
+    title = models.CharField(max_length=300, blank=True, default="")
+    location = models.CharField(max_length=200, blank=True, default="")
     lead_list = models.ForeignKey(
         "linkedin.LeadList",
         null=True,

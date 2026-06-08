@@ -115,6 +115,14 @@
         <div class="hint">Free-text filters above build the search. For exact company / school / location / industry (LinkedIn typeahead), build it in LinkedIn and paste the URL:</div>
         <label>…or paste a LinkedIn search URL</label><input id="searchq" placeholder="https://www.linkedin.com/search/results/people/?...">
       </div>
+      <h2>Find leads with AI</h2>
+      <div class="editor" style="max-width:720px">
+        <label>List name</label><input id="ainame" placeholder="e.g. AI: fintech founders">
+        <label>Describe who you are looking for (product / ideal customer)</label>
+        <textarea id="aiprompt" rows="3" placeholder="e.g. Founders and heads of growth at early-stage UK fintech startups who would buy grant-finding software"></textarea>
+        <button id="aibtn" onclick="runAi()">Find with AI</button>
+        <div class="hint">The LLM turns this into LinkedIn searches and enriches matches into a list (runs on the worker, ~couple of minutes).</div>
+      </div>
       <h2>Lead lists <span class="hint">(attach one to a campaign in the Campaigns tab)</span></h2>
       <table id="leadlists"><thead><tr><th>Name</th><th>Source</th><th>Leads</th><th>Export</th></tr></thead><tbody></tbody></table>
     </div>
@@ -164,9 +172,17 @@
         document.getElementById("convo").innerHTML =
           `<div class="convohead">${t.lead_name} <span class="acctbadge">via ${t.account_name}</span>` +
           (t.lead_url ? ` <a href="${t.lead_url}" target="_blank" style="font-size:12px;font-weight:400;margin-left:8px">↗ View on LinkedIn</a>` : "") + `</div>` +
-          t.messages.map(m => `<div class="msg ${m.direction}"><div class="who">${m.direction==="out"?("You ("+t.account_name+")"):t.lead_name}</div>${(m.body||"").replace(/</g,"&lt;")}</div>`).join("");
+          t.messages.map(m => `<div class="msg ${m.direction}"><div class="who">${m.direction==="out"?("You ("+t.account_name+")"):t.lead_name}</div>${(m.body||"").replace(/</g,"&lt;")}</div>`).join("") +
+          `<div style="margin-top:14px;display:flex;gap:8px"><input id="composebox" placeholder="Type a reply, sent from ${t.account_name}…" style="flex:1" onkeydown="if(event.key==='Enter')sendMsg(${id})"><button onclick="sendMsg(${id})" style="background:#2563eb;color:#fff;border:none;border-radius:6px;padding:7px 16px;cursor:pointer">Send</button></div>`;
         loadThreads();
       });
+    };
+    window.sendMsg = (id) => {
+      const box = document.getElementById("composebox"); const body = (box.value||"").trim();
+      if(!body) return;
+      box.disabled = true;
+      j(`api/inbox/thread/${id}/send/`, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({body})})
+        .then(r => { if(r.ok){ openThread(id); } else { box.disabled=false; alert(r.error||"send failed"); } });
     };
 
     function loadLeads(){
@@ -200,6 +216,13 @@
       const btn = document.getElementById("searchbtn"); btn.textContent = "Queued — worker scraping…"; btn.disabled = true;
       j("api/leads/search/", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)})
         .then(r => { btn.textContent = "Run search & import"; btn.disabled = false; if(r.ok){ alert("Search queued — leads will appear in the list below within ~2 min. Hit refresh."); loadLeads(); } else alert(r.error||"search failed"); });
+    };
+    window.runAi = () => {
+      const name = gv("ainame"); const prompt = gv("aiprompt");
+      if(!prompt){ alert("Describe who you are looking for"); return; }
+      const btn = document.getElementById("aibtn"); btn.textContent = "Queued — AI finding…"; btn.disabled = true;
+      j("api/leads/ai/", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({name, prompt})})
+        .then(r => { btn.textContent = "Find with AI"; btn.disabled = false; if(r.ok){ alert("AI search queued — leads appear in the list below in a couple of minutes. Hit refresh."); loadLeads(); } else alert(r.error||"failed"); });
     };
 
     const KPI = { connection_requests:"Connection Requests", messages_sent:"Messages Sent", inmails_sent:"InMails Sent", replies:"Replies", active:"Active", completed:"Completed" };

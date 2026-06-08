@@ -25,24 +25,40 @@ Branch = SequenceStep.Branch
 # ── Enrollment ────────────────────────────────────────────────────────
 
 
-def enroll_campaign(campaign) -> int:
+def busy_lead_ids(exclude_campaign=None) -> set:
+    """Lead ids currently live (active/paused) in some campaign — these must not
+    be double-enrolled, or we'd contact the same person twice."""
+    State = LeadCampaignState.State
+    qs = LeadCampaignState.objects.filter(state__in=[State.ACTIVE, State.PAUSED_MANUAL])
+    if exclude_campaign is not None:
+        qs = qs.exclude(campaign=exclude_campaign)
+    return set(qs.values_list("lead_id", flat=True))
+
+
+def enroll_campaign(campaign) -> dict:
     """Create ACTIVE states (due now, at the sequence root) for every lead in the
-    campaign's lead_list that isn't already enrolled. Idempotent. Returns count.
+    campaign's lead_list that isn't already enrolled here OR live in another
+    campaign. Idempotent. Returns ``{"enrolled": n, "skipped_duplicate": m}``.
     """
     if not campaign.sequence_id or not campaign.lead_list_id:
-        return 0
+        return {"enrolled": 0, "skipped_duplicate": 0}
     root = campaign.sequence.root_step
     if root is None:
-        return 0
+        return {"enrolled": 0, "skipped_duplicate": 0}
 
     from crm.models import Lead
 
     existing = set(
         LeadCampaignState.objects.filter(campaign=campaign).values_list("lead_id", flat=True)
     )
+    busy = busy_lead_ids(exclude_campaign=campaign)
     created = 0
+    skipped = 0
     for lead in Lead.objects.filter(lead_list_id=campaign.lead_list_id):
         if lead.pk in existing:
+            continue
+        if lead.pk in busy:
+            skipped += 1  # already live in another campaign — don't double-contact
             continue
         LeadCampaignState.objects.create(
             lead=lead,
@@ -53,7 +69,7 @@ def enroll_campaign(campaign) -> int:
             next_action_due_at=timezone.now(),
         )
         created += 1
-    return created
+    return {"enrolled": created, "skipped_duplicate": skipped}
 
 
 # ── Executor loop ─────────────────────────────────────────────────────

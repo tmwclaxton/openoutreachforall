@@ -60,9 +60,9 @@ class TestSequenceExecutor:
         owner = UserFactory()
         seq = _build_sequence(owner)
         campaign = _campaign_with_leads(owner, fake_session, seq, n=3)
-        assert executor.enroll_campaign(campaign) == 3
+        assert executor.enroll_campaign(campaign)["enrolled"] == 3
         # Idempotent.
-        assert executor.enroll_campaign(campaign) == 0
+        assert executor.enroll_campaign(campaign)["enrolled"] == 0
         assert LeadCampaignState.objects.filter(campaign=campaign).count() == 3
 
     def test_accepted_branch_walkthrough(self, fake_session):

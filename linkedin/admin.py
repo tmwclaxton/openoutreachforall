@@ -40,14 +40,18 @@ class CampaignAdmin(admin.ModelAdmin):
     @admin.action(description="Activate + enroll lead_list into the sequence")
     def activate_and_enroll(self, request, queryset):
         total = 0
+        dup = 0
         for campaign in queryset:
             if campaign.sequence_id and campaign.lead_list_id:
                 campaign.status = Campaign.Status.ACTIVE
                 campaign.save(update_fields=["status"])
-                total += executor.enroll_campaign(campaign)
-        self.message_user(
-            request, f"Enrolled {total} lead(s) across {queryset.count()} campaign(s).", messages.SUCCESS,
-        )
+                result = executor.enroll_campaign(campaign)
+                total += result["enrolled"]
+                dup += result["skipped_duplicate"]
+        msg = f"Enrolled {total} lead(s) across {queryset.count()} campaign(s)."
+        if dup:
+            msg += f" ⚠ Skipped {dup} already live in another campaign (duplicate-protected — not contacted twice)."
+        self.message_user(request, msg, messages.WARNING if dup else messages.SUCCESS)
 
 
 class SequenceStepInline(admin.TabularInline):

@@ -201,6 +201,57 @@ def api_leads_search(request):
     return JsonResponse({"ok": True, "queued": True, "list_id": ll.pk})
 
 
+@csrf_exempt
+@staff_member_required
+@require_POST
+def api_leads_ai(request):
+    """AI lead finder — describe your ICP; the worker generates search keywords
+    via the LLM, searches, and enriches matches into a new list."""
+    from linkedin.leads import importer
+    from linkedin.models import LeadList
+
+    payload = json.loads(request.body or "{}")
+    name = (payload.get("name") or "AI leads").strip()
+    prompt = (payload.get("prompt") or "").strip()
+    if not prompt:
+        return JsonResponse({"error": "describe who you're looking for"}, status=400)
+    ll = importer.create_lead_list(
+        name=name, owner=request.user, source_type=LeadList.SourceType.AI, source_url=prompt[:2000],
+    )
+    ll.pending_search = True
+    ll.save(update_fields=["pending_search"])
+    return JsonResponse({"ok": True, "queued": True, "list_id": ll.pk})
+
+
+@csrf_exempt
+@staff_member_required
+@require_POST
+def api_inbox_send(request, thread_id):
+    """Queue a manual reply typed in the Unibox; the worker sends it from the
+    thread's owning account on its next cycle."""
+    import hashlib
+
+    from django.utils import timezone
+
+    from linkedin.models import Message, MessageThread
+
+    t = MessageThread.objects.filter(pk=thread_id).first()
+    if not t:
+        return JsonResponse({"error": "not found"}, status=404)
+    payload = json.loads(request.body or "{}")
+    body = (payload.get("body") or "").strip()
+    if not body:
+        return JsonResponse({"error": "empty message"}, status=400)
+    mid = "manual-" + hashlib.sha1((body + str(timezone.now())).encode()).hexdigest()[:16]
+    Message.objects.create(
+        thread=t, direction="out", body=body, sent_via_tool=True, pending_send=True,
+        sender_account=t.account, linkedin_message_id=mid, sent_at=timezone.now(),
+    )
+    t.last_message_at = timezone.now()
+    t.save(update_fields=["last_message_at"])
+    return JsonResponse({"ok": True, "queued": True})
+
+
 @staff_member_required
 def api_leadlist_export(request, list_id):
     from linkedin.models import LeadList
@@ -211,9 +262,12 @@ def api_leadlist_export(request, list_id):
     resp = HttpResponse(content_type="text/csv")
     resp["Content-Disposition"] = f'attachment; filename="leads-{ll.pk}.csv"'
     w = _csv.writer(resp)
-    w.writerow(["linkedin_url", "public_identifier", "first_name", "last_name", "company"])
+    w.writerow(["first_name", "last_name", "title", "company", "location", "linkedin_url", "public_identifier"])
     for lead in ll.leads.all():
-        w.writerow([lead.linkedin_url, lead.public_identifier, lead.first_name, lead.last_name, lead.company])
+        w.writerow([
+            lead.first_name, lead.last_name, lead.title, lead.company,
+            lead.location, lead.linkedin_url, lead.public_identifier,
+        ])
     return resp
 
 

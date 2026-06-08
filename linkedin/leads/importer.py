@@ -154,9 +154,43 @@ def import_search_url(session, lead_list, url: str, cap: int = SEARCH_IMPORT_CAP
     return {"created": created, "scraped": len(scraped)}
 
 
+def import_ai_search(session, lead_list, prompt: str, cap: int = 30, max_keywords: int = 4) -> dict:
+    """AI lead finder (the original OpenOutreach discovery): the LLM turns an ICP
+    description into LinkedIn search keywords, each is searched, and matching
+    profiles are enriched into ``lead_list``. Returns ``{created, keywords}``.
+    """
+    from linkedin.db.leads import create_enriched_lead, lead_exists
+    from linkedin.pipeline.search_keywords import generate_search_keywords
+    from linkedin_cli.actions.search import search_people
+    from linkedin_cli.api.client import PlaywrightLinkedinAPI
+
+    keywords = (generate_search_keywords(product_docs=prompt, campaign_objective="") or [])[:max_keywords]
+    session.ensure_browser()
+    api = PlaywrightLinkedinAPI(session=session)
+    created = 0
+    for kw in keywords:
+        if created >= cap:
+            break
+        for p in search_people(session, kw).get("profiles", []):
+            if created >= cap:
+                break
+            url = p.get("url")
+            if not url or lead_exists(url):
+                continue
+            try:
+                profile, _raw = api.get_profile(profile_url=url)
+            except Exception:
+                continue
+            if profile and create_enriched_lead(session, url, profile, lead_list=lead_list) is not None:
+                created += 1
+
+    logger.info("AI search into %s: created=%d keywords=%s", lead_list, created, keywords)
+    return {"created": created, "keywords": keywords}
+
+
 def process_pending_searches(session, cap: int = SEARCH_IMPORT_CAP) -> list:
-    """Scrape any lead lists queued via the dashboard search box. Clears the
-    ``pending_search`` flag whether or not the scrape succeeds. Returns
+    """Scrape/AI-find any lead lists queued via the dashboard. Clears the
+    ``pending_search`` flag whether or not it succeeds. Returns
     ``[(list_id, created), ...]``.
     """
     from linkedin.models import LeadList
@@ -164,7 +198,10 @@ def process_pending_searches(session, cap: int = SEARCH_IMPORT_CAP) -> list:
     results = []
     for ll in LeadList.objects.filter(pending_search=True, archived_at__isnull=True):
         try:
-            r = import_search_url(session, ll, ll.source_url or "", cap=cap)
+            if ll.source_type == LeadList.SourceType.AI:
+                r = import_ai_search(session, ll, ll.source_url or "", cap=cap)
+            else:
+                r = import_search_url(session, ll, ll.source_url or "", cap=cap)
             results.append((ll.pk, r.get("created", 0)))
         except Exception:
             logger.exception("Pending search failed for list %s", ll.pk)

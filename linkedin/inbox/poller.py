@@ -67,6 +67,42 @@ def fetch_thread_messages(session, lead) -> list[dict]:
     return out
 
 
+def process_pending_sends(session) -> int:
+    """Send any manual replies queued from the Unibox. Sends from the thread's
+    owning account (single-account today = the worker's session). Returns count.
+    """
+    from django.utils import timezone
+
+    from linkedin.models import Message
+    from linkedin_cli.actions.message import send_raw_message
+
+    sent = 0
+    pending = Message.objects.filter(pending_send=True).select_related("thread__lead", "thread__account")
+    for m in pending:
+        lead = m.thread.lead
+        urn = lead.urn
+        if not urn:
+            try:
+                urn = lead.get_urn(session)
+            except Exception:
+                urn = ""
+        try:
+            ok = send_raw_message(
+                session,
+                {"public_identifier": lead.public_identifier, "url": lead.linkedin_url, "urn": urn or ""},
+                m.body,
+            )
+        except Exception:
+            logger.exception("Manual send failed for message %s", m.pk)
+            continue
+        if ok:
+            m.pending_send = False
+            m.sent_at = timezone.now()
+            m.save(update_fields=["pending_send", "sent_at"])
+            sent += 1
+    return sent
+
+
 def poll_replies(session, campaign=None) -> int:
     """Poll active sequence leads; persist messages; stop any that replied.
     Returns the number of states transitioned to ``stopped_reply``.

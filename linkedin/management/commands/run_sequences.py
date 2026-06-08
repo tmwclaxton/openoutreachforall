@@ -13,7 +13,7 @@ class Command(BaseCommand):
         for campaign in Campaign.objects.filter(
             status=Campaign.Status.ACTIVE, sequence__isnull=False, lead_list__isnull=False,
         ):
-            enrolled += executor.enroll_campaign(campaign)
+            enrolled += executor.enroll_campaign(campaign)["enrolled"]
         self.stdout.write(f"Enrolled {enrolled} new lead state(s).")
 
         profile = get_first_active_profile()

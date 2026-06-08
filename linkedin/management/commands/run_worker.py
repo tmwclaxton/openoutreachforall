@@ -11,7 +11,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         from linkedin.browser.registry import get_first_active_profile, get_or_create_session
-        from linkedin.inbox.poller import poll_replies
+        from linkedin.inbox.poller import poll_replies, process_pending_sends
         from linkedin.leads.importer import process_pending_searches
         from linkedin.sequences.executor import run_due_states
 
@@ -33,11 +33,13 @@ class Command(BaseCommand):
                 # Poll FIRST so a reply flips the lead to stopped_reply before the
                 # executor would otherwise fire its follow-up.
                 stopped = poll_replies(session)
+                manual = process_pending_sends(session)
                 executed = run_due_states(session)
                 # Cap dashboard searches so enrichment doesn't block the cycle for hours.
                 searched = process_pending_searches(session, cap=30)
                 self.stdout.write(
-                    f"cycle: replies_stopped={stopped} executed={executed} searches={searched}", ending="\n",
+                    f"cycle: replies_stopped={stopped} manual_sent={manual} executed={executed} searches={searched}",
+                    ending="\n",
                 )
             except Exception as exc:  # keep the worker alive across transient errors
                 self.stderr.write(f"cycle error: {exc!r}"[:200])

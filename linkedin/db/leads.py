@@ -46,10 +46,17 @@ def create_enriched_lead(session, url: str, profile: Dict[str, Any], lead_list=N
                 urn, public_id,
             )
             return None
+        positions = profile.get("positions") or []
+        company = ""
+        if positions and isinstance(positions[0], dict):
+            company = positions[0].get("company_name", "") or ""
         lead = Lead.objects.create(
             linkedin_url=clean_url, public_identifier=public_id, lead_list=lead_list,
             first_name=profile.get("first_name", "") or "",
             last_name=profile.get("last_name", "") or "",
+            company=company,
+            title=profile.get("headline", "") or "",
+            location=profile.get("location_name", "") or "",
         )
         _cache_urn_from_profile(lead, profile)
 

@@ -110,6 +110,7 @@ class LeadList(models.Model):
     class SourceType(models.TextChoices):
         CSV = "csv", "CSV upload"
         SEARCH_URL = "search_url", "LinkedIn search URL"
+        AI = "ai", "AI lead finder"
         MANUAL = "manual", "Manual"
 
     name = models.CharField(max_length=200)
@@ -423,6 +424,8 @@ class Message(models.Model):
     sent_at = models.DateTimeField(null=True, blank=True)
     linkedin_message_id = models.CharField(max_length=255)
     sent_via_tool = models.BooleanField(default=False)  # M5 inbox privacy default
+    # A manual reply typed in the Unibox, queued for the worker to actually send.
+    pending_send = models.BooleanField(default=False)
     fetched_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
