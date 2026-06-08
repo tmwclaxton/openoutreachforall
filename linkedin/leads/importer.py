@@ -188,6 +188,36 @@ def import_ai_search(session, lead_list, prompt: str, cap: int = 30, max_keyword
     return {"created": created, "keywords": keywords}
 
 
+def backfill_lead_profiles(session, limit: int = 8) -> int:
+    """Re-scrape leads missing a title and populate name/title/company/location,
+    then reset their ai_score so they get re-ranked with real data. Returns count.
+    """
+    from crm.models import Lead
+
+    done = 0
+    for lead in Lead.objects.filter(title="", disqualified=False)[:limit]:
+        try:
+            profile = lead.get_profile(session)
+        except Exception:
+            continue
+        if not profile:
+            continue
+        positions = profile.get("positions") or []
+        company = positions[0].get("company_name", "") if positions and isinstance(positions[0], dict) else ""
+        lead.title = profile.get("headline", "") or ""
+        lead.company = company or lead.company
+        lead.location = profile.get("location_name", "") or ""
+        if not lead.first_name:
+            lead.first_name = profile.get("first_name", "") or ""
+        if not lead.last_name:
+            lead.last_name = profile.get("last_name", "") or ""
+        lead.ai_score = None  # re-rank with the new data
+        lead.ai_reason = ""
+        lead.save()
+        done += 1
+    return done
+
+
 def process_pending_searches(session, cap: int = SEARCH_IMPORT_CAP) -> list:
     """Scrape/AI-find any lead lists queued via the dashboard. Clears the
     ``pending_search`` flag whether or not it succeeds. Returns
