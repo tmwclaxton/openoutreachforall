@@ -7,6 +7,7 @@ urlpatterns = [
     path("", views.dashboard_page, name="dashboard"),
     path("api/context/", views.api_context, name="dashboard_api_context"),
     path("api/context/save/", views.api_context_save, name="dashboard_api_context_save"),
+    path("api/holiday-countries/", views.api_holiday_countries, name="dashboard_api_holiday_countries"),
     path("api/ai-config/", views.api_ai_config, name="dashboard_api_ai_config"),
     path("api/ai-config/save/", views.api_ai_config_save, name="dashboard_api_ai_config_save"),
     path("api/kpis/", views.api_kpis, name="dashboard_api_kpis"),

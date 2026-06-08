@@ -86,6 +86,25 @@ def api_context(request):
 
 
 @staff_member_required
+def api_holiday_countries(request):
+    """Country codes the bank-holiday calendar supports (from the holidays lib);
+    a curated fallback if the package isn't installed."""
+    fallback = [
+        # UK + the named markets, then EU27 + EEA
+        "GB", "IE", "US", "CA", "AU", "NZ",
+        "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR",
+        "HU", "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI",
+        "ES", "SE", "CH", "NO", "IS",
+    ]
+    try:
+        import holidays
+        codes = sorted(holidays.list_supported_countries().keys())
+    except Exception:
+        codes = fallback
+    return JsonResponse({"countries": codes})
+
+
+@staff_member_required
 def api_ai_config(request):
     """AI provider settings for the management page. The API key is never echoed
     back in full — only a masked hint and whether one is set."""

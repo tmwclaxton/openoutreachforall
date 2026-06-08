@@ -331,8 +331,17 @@
       if (sel && !list.includes(sel)) list.unshift(sel);
       return list.map(z => `<option value="${z}"${z===sel?" selected":""}>${z.replace(/_/g," ")}</option>`).join("");
     }
+    let HOLIDAY_COUNTRIES = ["GB"];
+    const REGION_NAMES = (typeof Intl.DisplayNames === "function") ? new Intl.DisplayNames(["en"], {type:"region"}) : null;
+    function countryName(code){ try { return (REGION_NAMES && REGION_NAMES.of(code)) || code; } catch(e){ return code; } }
+    function countryOptions(sel){
+      const list = HOLIDAY_COUNTRIES.slice();
+      if (sel && !list.includes(sel)) list.unshift(sel);
+      return list.map(c => `<option value="${c}"${c===sel?" selected":""}>${countryName(c)} (${c})</option>`).join("");
+    }
     function loadAccounts(){
-      j("api/accounts/").then(d => {
+      Promise.all([j("api/accounts/"), j("api/holiday-countries/")]).then(([d, hc]) => {
+        HOLIDAY_COUNTRIES = (hc && hc.countries && hc.countries.length) ? hc.countries : HOLIDAY_COUNTRIES;
         document.querySelector("#accts tbody").innerHTML = d.accounts.map(a => {
           const wd = a.send_weekdays || [0,1,2,3,4];
           const days = DAYS.map((lbl,i)=>`<label style="display:inline;margin-right:7px;font-size:12px"><input type="checkbox" ${wd.includes(i)?"checked":""} id="ac_wd_${a.id}_${i}"> ${lbl}</label>`).join("");
@@ -352,7 +361,7 @@
             &nbsp;<select id="ac_tz_${a.id}" style="width:200px">${tzOptions(a.send_timezone||'Europe/London')}</select>
             &nbsp;&nbsp;${days}
             &nbsp;&nbsp;<label style="display:inline;font-size:12px"><input type="checkbox" ${a.skip_bank_holidays?"checked":""} id="ac_bh_${a.id}"> Skip bank holidays</label>
-            <input value="${a.holiday_country||'GB'}" id="ac_hc_${a.id}" style="width:42px" title="Country code, e.g. GB">
+            <select id="ac_hc_${a.id}" style="width:180px">${countryOptions(a.holiday_country||'GB')}</select>
           </td></tr>`;
         }).join("") || `<tr><td colspan="8">No accounts.</td></tr>`;
       });
