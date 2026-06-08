@@ -77,6 +77,123 @@ def _lead_name(lead):
 
 
 @staff_member_required
+def api_accounts(request):
+    from linkedin.accounts.limits import daily_count, inmail_sent_this_month
+    from linkedin.models import LinkedInProfile
+
+    out = []
+    for a in LinkedInProfile.objects.all():
+        caps = a.daily_caps_json or {}
+        out.append({
+            "id": a.pk, "username": a.linkedin_username, "active": a.active,
+            "has_inmail": a.has_inmail, "has_totp": bool(a.totp_secret),
+            "inmail_monthly_cap": a.inmail_monthly_cap, "inmail_used_month": inmail_sent_this_month(a),
+            "connect_cap": caps.get("connect", 25), "message_cap": caps.get("message", 50),
+            "connect_used": daily_count(a, "connect"), "message_used": daily_count(a, "message"),
+        })
+    return JsonResponse({"accounts": out})
+
+
+@csrf_exempt
+@staff_member_required
+@require_POST
+def api_account_add(request):
+    from django.contrib.auth.models import User
+    from linkedin.models import LinkedInProfile
+
+    payload = json.loads(request.body or "{}")
+    email = (payload.get("username") or "").strip()
+    password = payload.get("password") or ""
+    if not email or not password:
+        return JsonResponse({"error": "email + password required"}, status=400)
+    handle = (email.split("@")[0].lower().replace(".", "_").replace("+", "_") or "acct")[:140]
+    base, i = handle, 1
+    while User.objects.filter(username=handle).exists():
+        handle = f"{base}{i}"
+        i += 1
+    user = User.objects.create(username=handle, is_staff=True, is_active=True)
+    user.set_unusable_password()
+    user.save()
+    prof = LinkedInProfile.objects.create(
+        user=user, linkedin_username=email, linkedin_password=password,
+        has_inmail=bool(payload.get("has_inmail")), totp_secret=payload.get("totp_secret", "") or "",
+        legal_accepted=True,
+    )
+    return JsonResponse({"ok": True, "id": prof.pk})
+
+
+@csrf_exempt
+@staff_member_required
+@require_POST
+def api_account_update(request, account_id):
+    from linkedin.models import LinkedInProfile
+
+    prof = LinkedInProfile.objects.filter(pk=account_id).first()
+    if not prof:
+        return JsonResponse({"error": "not found"}, status=404)
+    payload = json.loads(request.body or "{}")
+    if "active" in payload:
+        prof.active = bool(payload["active"])
+    if "has_inmail" in payload:
+        prof.has_inmail = bool(payload["has_inmail"])
+    if payload.get("totp_secret"):
+        prof.totp_secret = payload["totp_secret"]
+    if payload.get("inmail_monthly_cap") is not None:
+        prof.inmail_monthly_cap = int(payload["inmail_monthly_cap"])
+    caps = prof.daily_caps_json or {}
+    if payload.get("connect_cap") is not None:
+        caps["connect"] = int(payload["connect_cap"])
+    if payload.get("message_cap") is not None:
+        caps["message"] = int(payload["message_cap"])
+    prof.daily_caps_json = caps
+    prof.save()
+    return JsonResponse({"ok": True})
+
+
+@staff_member_required
+def api_campaigns(request):
+    from linkedin.models import Campaign
+
+    out = []
+    for c in Campaign.objects.filter(sequence__isnull=False).order_by("-id"):
+        out.append({
+            "id": c.pk,
+            "name": c.name,
+            "status": c.status,
+            "sequence": c.sequence.name if c.sequence else "",
+            "lead_list": c.lead_list.name if c.lead_list else "",
+            "leads": c.lead_states.count(),
+        })
+    return JsonResponse({"campaigns": out})
+
+
+@staff_member_required
+def api_campaign_leads(request, campaign_id):
+    from linkedin.models import LeadCampaignState
+
+    states = (
+        LeadCampaignState.objects.filter(campaign_id=campaign_id)
+        .select_related("lead", "current_step")
+        .order_by("-lead__ai_score")
+    )
+    leads = []
+    for s in states:
+        stage = s.current_step.step_type if s.current_step else "—"
+        if s.current_step and s.current_step.step_type == "connect" and s.awaiting_decision:
+            stage = "connect (awaiting accept)"
+        leads.append({
+            "lead_name": _lead_name(s.lead),
+            "lead_url": s.lead.linkedin_url,
+            "title": s.lead.title,
+            "company": s.lead.company,
+            "ai_score": s.lead.ai_score,
+            "stage": stage,
+            "state": s.state,
+        })
+    return JsonResponse({"leads": leads})
+
+
+@staff_member_required
 def api_inbox_accounts(request):
     from linkedin.models import LinkedInProfile
 

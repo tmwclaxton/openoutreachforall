@@ -81,7 +81,20 @@
         <div class="convo" id="convo"><div class="hint" style="padding:24px">Select a conversation…</div></div>
       </div>
     </div>
-    <div class="tab" id="tab-accounts"><iframe data-src="/admin/linkedin/linkedinprofile/"></iframe></div>
+    <div class="tab" id="tab-accounts">
+      <h2>Add LinkedIn account</h2>
+      <div class="editor" style="max-width:720px">
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div style="flex:1"><label>LinkedIn email</label><input id="acc_email"></div>
+          <div style="flex:1"><label>Password</label><input id="acc_pw" type="password"></div>
+        </div>
+        <label>TOTP secret (optional — for native 2FA)</label><input id="acc_totp" placeholder="base32 secret">
+        <label style="display:inline"><input type="checkbox" id="acc_inmail"> Has InMail (Premium/Sales Nav)</label>
+        <div><button onclick="addAccount()">Add account</button></div>
+      </div>
+      <h2>Accounts</h2>
+      <table id="accts"><thead><tr><th>Account</th><th>Active</th><th>InMail</th><th>2FA</th><th>Connect/day</th><th>Message/day</th><th>InMail/mo</th><th></th></tr></thead><tbody></tbody></table>
+    </div>
     <div class="tab" id="tab-leads">
       <h2>Add leads from CSV</h2>
       <div class="editor" style="max-width:680px">
@@ -126,7 +139,18 @@
       <h2>Lead lists <span class="hint">(attach one to a campaign in the Campaigns tab)</span></h2>
       <table id="leadlists"><thead><tr><th>Name</th><th>Source</th><th>Leads</th><th>Export</th></tr></thead><tbody></tbody></table>
     </div>
-    <div class="tab" id="tab-campaigns"><iframe data-src="/admin/linkedin/campaign/"></iframe></div>
+    <div class="tab" id="tab-campaigns">
+      <div class="bar">
+        <label>Campaign:</label> <select id="camppick"></select>
+        <label>State:</label> <select id="campstate"><option value="">All</option><option value="active">Active</option><option value="completed">Completed</option><option value="stopped_reply">Replied</option><option value="paused_manual">Paused</option></select>
+        <a href="/admin/linkedin/campaign/add/" target="_blank" class="addbtn">+ New campaign</a>
+      </div>
+      <table id="campleads"><thead><tr>
+        <th onclick="sortCamp('lead_name')">Lead ▾</th><th onclick="sortCamp('title')">Title</th>
+        <th onclick="sortCamp('company')">Company</th><th onclick="sortCamp('ai_score')">AI score ▾</th>
+        <th onclick="sortCamp('stage')">Stage</th><th onclick="sortCamp('state')">State</th><th></th>
+      </tr></thead><tbody></tbody></table>
+    </div>
 
     <div class="tab" id="tab-context">
       <h2>AI Context — what you sell &amp; your ideal lead</h2>
@@ -151,6 +175,66 @@
       if (id === "leads") loadLeads();
       if (id === "unibox") loadInbox();
       if (id === "context") loadContext();
+      if (id === "campaigns") loadCampaigns();
+      if (id === "accounts") loadAccounts();
+    }
+
+    function loadAccounts(){
+      j("api/accounts/").then(d => {
+        document.querySelector("#accts tbody").innerHTML = d.accounts.map(a => `<tr>
+          <td>${a.username}</td>
+          <td><input type="checkbox" ${a.active?"checked":""} id="ac_active_${a.id}"></td>
+          <td><input type="checkbox" ${a.has_inmail?"checked":""} id="ac_inmail_${a.id}"></td>
+          <td>${a.has_totp?"✓":"—"}</td>
+          <td>${a.connect_used}/<input type="number" value="${a.connect_cap}" id="ac_conn_${a.id}" style="width:58px"></td>
+          <td>${a.message_used}/<input type="number" value="${a.message_cap}" id="ac_msg_${a.id}" style="width:58px"></td>
+          <td>${a.inmail_used_month}/<input type="number" value="${a.inmail_monthly_cap}" id="ac_inm_${a.id}" style="width:48px"></td>
+          <td><button onclick="saveAccount(${a.id})">Save</button></td></tr>`).join("") || `<tr><td colspan="8">No accounts.</td></tr>`;
+      });
+    }
+    window.saveAccount = (id) => {
+      j(`api/account/${id}/`, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({
+        active: document.getElementById("ac_active_"+id).checked,
+        has_inmail: document.getElementById("ac_inmail_"+id).checked,
+        connect_cap: document.getElementById("ac_conn_"+id).value,
+        message_cap: document.getElementById("ac_msg_"+id).value,
+        inmail_monthly_cap: document.getElementById("ac_inm_"+id).value,
+      })}).then(r => { if(r.ok) loadAccounts(); else alert(r.error||"failed"); });
+    };
+    window.addAccount = () => {
+      j("api/accounts/add/", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({
+        username: gv("acc_email"), password: gv("acc_pw"), totp_secret: gv("acc_totp"),
+        has_inmail: document.getElementById("acc_inmail").checked,
+      })}).then(r => { if(r.ok){ document.getElementById("acc_email").value=""; document.getElementById("acc_pw").value=""; document.getElementById("acc_totp").value=""; loadAccounts(); alert("Account added."); } else alert(r.error||"failed"); });
+    };
+
+    let CAMP_LEADS = [], CAMP_SORT = "ai_score", CAMP_DESC = true, CAMPS_LOADED = false;
+    function loadCampaigns(){
+      if (!CAMPS_LOADED){
+        j("api/campaigns/").then(d => {
+          const sel = document.getElementById("camppick");
+          sel.innerHTML = d.campaigns.map(c => `<option value="${c.id}">${c.name} (${c.leads})</option>`).join("") || `<option value="">No sequence campaigns</option>`;
+          sel.onchange = loadCampaignLeads;
+          document.getElementById("campstate").onchange = renderCampLeads;
+          CAMPS_LOADED = true;
+          if (d.campaigns.length) loadCampaignLeads();
+        });
+      } else { loadCampaignLeads(); }
+    }
+    function loadCampaignLeads(){
+      const id = document.getElementById("camppick").value;
+      if (!id) return;
+      j(`api/campaign/${id}/leads/`).then(d => { CAMP_LEADS = d.leads; renderCampLeads(); });
+    }
+    window.sortCamp = (k) => { if (CAMP_SORT===k) CAMP_DESC = !CAMP_DESC; else { CAMP_SORT = k; CAMP_DESC = (k==="ai_score"); } renderCampLeads(); };
+    function renderCampLeads(){
+      const sf = document.getElementById("campstate").value;
+      const rows = CAMP_LEADS.filter(l => !sf || l.state === sf);
+      rows.sort((a,b) => { let x=a[CAMP_SORT], y=b[CAMP_SORT]; if(x==null)x=(CAMP_SORT==="ai_score"?-1:""); if(y==null)y=(CAMP_SORT==="ai_score"?-1:""); return (x<y?-1:x>y?1:0)*(CAMP_DESC?-1:1); });
+      document.querySelector("#campleads tbody").innerHTML = rows.map(l => `<tr>
+        <td>${l.lead_name}</td><td>${(l.title||"").slice(0,45)}</td><td>${(l.company||"").slice(0,25)}</td>
+        <td>${l.ai_score==null?"—":l.ai_score}</td><td>${l.stage}</td><td>${l.state}</td>
+        <td><a href="${l.lead_url}" target="_blank">↗</a></td></tr>`).join("") || `<tr><td colspan="7">No leads in this campaign.</td></tr>`;
     }
 
     function loadContext(){
