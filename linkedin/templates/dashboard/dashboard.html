@@ -138,6 +138,7 @@
           <option value="365">Last 12 months</option>
         </select></span>
         <span><label>Campaign</label><select id="dashcamp"><option value="">All campaigns</option></select></span>
+        <span><label>Account</label><select id="dashacct"><option value="">All accounts</option></select></span>
       </div>
       <div class="kpis" id="kpis"></div>
       <div class="card"><canvas id="kpichart" height="90"></canvas></div>
@@ -322,6 +323,14 @@
     }
 
     const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+    const TZS = (typeof Intl.supportedValuesOf === "function")
+      ? Intl.supportedValuesOf("timeZone")
+      : ["UTC","Europe/London","Europe/Dublin","Europe/Paris","Europe/Berlin","Europe/Madrid","America/New_York","America/Chicago","America/Denver","America/Los_Angeles","Asia/Dubai","Asia/Singapore","Australia/Sydney"];
+    function tzOptions(sel){
+      const list = TZS.slice();
+      if (sel && !list.includes(sel)) list.unshift(sel);
+      return list.map(z => `<option value="${z}"${z===sel?" selected":""}>${z.replace(/_/g," ")}</option>`).join("");
+    }
     function loadAccounts(){
       j("api/accounts/").then(d => {
         document.querySelector("#accts tbody").innerHTML = d.accounts.map(a => {
@@ -340,7 +349,7 @@
             <b style="font-size:12px">Send window</b>
             <input type="number" min="0" max="23" value="${a.send_start_hour}" id="ac_sh_${a.id}" style="width:52px">:00
             – <input type="number" min="1" max="24" value="${a.send_end_hour}" id="ac_eh_${a.id}" style="width:52px">:00
-            &nbsp;<input value="${a.send_timezone||'Europe/London'}" id="ac_tz_${a.id}" style="width:150px" placeholder="Europe/London">
+            &nbsp;<select id="ac_tz_${a.id}" style="width:200px">${tzOptions(a.send_timezone||'Europe/London')}</select>
             &nbsp;&nbsp;${days}
             &nbsp;&nbsp;<label style="display:inline;font-size:12px"><input type="checkbox" ${a.skip_bank_holidays?"checked":""} id="ac_bh_${a.id}"> Skip bank holidays</label>
             <input value="${a.holiday_country||'GB'}" id="ac_hc_${a.id}" style="width:42px" title="Country code, e.g. GB">
@@ -650,7 +659,8 @@
     function dashQuery(){
       const days = document.getElementById("dashdays").value;
       const camp = document.getElementById("dashcamp").value;
-      const p = new URLSearchParams({days}); if (camp) p.set("campaign", camp);
+      const acct = document.getElementById("dashacct").value;
+      const p = new URLSearchParams({days}); if (camp) p.set("campaign", camp); if (acct) p.set("account", acct);
       return "?" + p.toString();
     }
     const CHART_SERIES = [
@@ -681,11 +691,12 @@
       j("api/kpis/"+q).then(d => { document.getElementById("kpis").innerHTML = Object.entries(KPI).map(([k,l]) => `<div class="kpi"><div class="label">${l}</div><div class="value">${d[k]??0}</div></div>`).join(""); });
       j("api/kpi/timeseries/"+q).then(drawChart);
     }
-    document.getElementById("dashdays").onchange = loadDash;
-    document.getElementById("dashcamp").onchange = loadDash;
+    ["dashdays","dashcamp","dashacct"].forEach(id => document.getElementById(id).onchange = loadDash);
     j("api/campaigns/").then(d => {
-      const sel = document.getElementById("dashcamp");
-      sel.innerHTML = `<option value="">All campaigns</option>` + (d.campaigns||[]).map(c=>`<option value="${c.id}">${c.name}</option>`).join("");
+      document.getElementById("dashcamp").innerHTML = `<option value="">All campaigns</option>` + (d.campaigns||[]).map(c=>`<option value="${c.id}">${c.name}</option>`).join("");
+    });
+    j("api/inbox/accounts/").then(d => {
+      document.getElementById("dashacct").innerHTML = `<option value="">All accounts</option>` + (d.accounts||[]).map(a=>`<option value="${a.id}">${a.name}</option>`).join("");
     });
     loadDash();
     j("api/senders/").then(d => { const c=(u,k)=>u[k]?`${u[k].used}/${u[k].cap}`:"—";

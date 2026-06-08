@@ -37,6 +37,7 @@ def api_kpi_timeseries(request):
 
     days = int(request.GET.get("days") or 30)
     campaign = request.GET.get("campaign") or None
+    account = request.GET.get("account") or None
     window = days if days else 365
     if window <= 45:
         gran, trunc = "day", TruncDay
@@ -54,12 +55,16 @@ def api_kpi_timeseries(request):
     base = ActionLog.objects.all()
     if campaign:
         base = base.filter(campaign_id=campaign)
+    if account:
+        base = base.filter(linkedin_profile_id=account)
     connects = series(base.filter(action_type="connect"), "created_at")
     messages = series(base.filter(action_type="message"), "created_at")
     inmails = series(base.filter(action_type="inmail"), "created_at")
     rep_qs = Message.objects.filter(direction="in")
     if campaign:
         rep_qs = rep_qs.filter(thread__lead__campaign_states__campaign_id=campaign)
+    if account:
+        rep_qs = rep_qs.filter(thread__account_id=account)
     replies = series(rep_qs, "sent_at")
 
     labels = sorted(set(connects) | set(messages) | set(inmails) | set(replies))
@@ -708,6 +713,26 @@ def api_leadlist_events(request, list_id):
         {"role": e.role, "text": e.text, "meta": e.meta, "at": when(e.created_at)}
         for e in ll.events.all()
     ]
+    # Legacy lists created before the activity log existed have no events — show
+    # the original prompt(s) reconstructed from what's stored (source_url holds
+    # the AI prompt, joined by " | " as it was refined).
+    if not events:
+        from linkedin.models import LeadList
+
+        seeded = []
+        if ll.source_type == LeadList.SourceType.AI and ll.source_url:
+            for part in ll.source_url.split(" | "):
+                if part.strip():
+                    seeded.append({"role": "user", "text": part.strip(), "meta": {}, "at": when(ll.created_at)})
+        elif ll.source_type == LeadList.SourceType.SEARCH_URL and ll.source_url:
+            seeded.append({"role": "system", "text": f"Saved LinkedIn search: {ll.source_url}", "meta": {}, "at": when(ll.created_at)})
+        seeded.append({
+            "role": "system",
+            "text": f"{ll.leads.count()} leads gathered so far (target {ll.target_count})."
+                    + ("" if ll.pending_search else " Finder is idle — hit Continue / refine to gather more."),
+            "meta": {}, "at": when(ll.created_at),
+        })
+        events = seeded
     return JsonResponse({"name": ll.name, "source": ll.source_type, "events": events})
 
 
@@ -887,6 +912,7 @@ def api_kpis(request):
     State = LeadCampaignState.State
     days = int(request.GET.get("days") or 0)
     campaign = request.GET.get("campaign") or None
+    account = request.GET.get("account") or None
     since = timezone.now() - timedelta(days=days) if days else None
 
     def actions(t):
@@ -895,6 +921,8 @@ def api_kpis(request):
             q = q.filter(created_at__gte=since)
         if campaign:
             q = q.filter(campaign_id=campaign)
+        if account:
+            q = q.filter(linkedin_profile_id=account)
         return q.count()
 
     def states(s):
@@ -908,6 +936,8 @@ def api_kpis(request):
         replies_q = replies_q.filter(messages__direction="in", messages__sent_at__gte=since)
     if campaign:
         replies_q = replies_q.filter(lead__campaign_states__campaign_id=campaign)
+    if account:
+        replies_q = replies_q.filter(account_id=account)
 
     return JsonResponse({
         "connection_requests": actions("connect"),
