@@ -46,8 +46,14 @@ def api_update_step(request, step_id):
 
 
 def _lead_name(lead):
-    name = f"{lead.first_name} {lead.last_name}".strip()
-    return name or (lead.public_identifier or "").replace("-", " ").title()
+    if lead.first_name and lead.last_name:
+        return f"{lead.first_name} {lead.last_name}".strip()
+    parts = (lead.public_identifier or "").split("-")
+    # Drop a trailing LinkedIn hash suffix (pure digits, or mixed letters+digits).
+    while parts and (parts[-1].isdigit() or (any(c.isdigit() for c in parts[-1]) and any(c.isalpha() for c in parts[-1]))):
+        parts.pop()
+    derived = " ".join(p.title() for p in parts)
+    return derived or lead.first_name or "Lead"
 
 
 @staff_member_required
