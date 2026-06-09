@@ -794,9 +794,10 @@
       else KCHART = new Chart(ctx, { type:"line", data, options:opts });
     }
     function activityRow(a){
-      const lead = a.lead && a.lead !== "—" ? ` — <b>${a.lead}</b>${a.lead_url?` <a href="${a.lead_url}" target="_blank">↗</a>`:""}` : "";
-      const post = (a.action === "like_post" && a.post_url) ? ` · <a href="${a.post_url}" target="_blank">see post</a>` : "";
-      return `<div class="feedrow"><span>${ACT_LABEL[a.action]||a.action}${lead}${post}</span> <span class="hint">${a.at} · ${a.account}</span></div>`;
+      const who = a.lead && a.lead !== "—" ? ` — <b>${a.lead}</b>` : "";
+      const profile = a.lead_url ? ` <a href="${a.lead_url}" target="_blank">View profile ↗</a>` : "";
+      const post = (a.action === "like_post" && a.post_url) ? ` · <a href="${a.post_url}" target="_blank">View liked post ↗</a>` : "";
+      return `<div class="feedrow"><span>${ACT_LABEL[a.action]||a.action}${who}${profile}${post}</span> <span class="hint">${a.at} · ${a.account}</span></div>`;
     }
     function loadActivity(){
       const days = document.getElementById("dashdays").value;
