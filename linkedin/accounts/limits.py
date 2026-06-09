@@ -188,11 +188,21 @@ def _last_action_at(account, action_type):
     )
 
 
+def _window_open_today(account, now):
+    """The send window's opening instant for ``now``'s local day (tz-aware)."""
+    local = now.astimezone(_account_tz(account))
+    return local.replace(hour=account.send_start_hour, minute=0, second=0, microsecond=0)
+
+
 def next_action_at(account, action_type):
-    """When this account may next perform ``action_type`` — paces the day's cap
-    evenly across the send window (with mild jitter) so e.g. 25 connects drip out
-    over the working day instead of bursting, and never outside the window. A
-    return value <= now means 'go now'."""
+    """When this account may next perform ``action_type``.
+
+    Schedule-anchored: send #N of the day is pegged to ``window_open + N*spacing``
+    (spacing = window / cap), with jitter. So it spreads the cap evenly across the
+    window AND self-corrects — if it falls behind (slow cycle, restart, stall) it
+    catches up toward the cap rather than drifting, while a ``min_gap`` floor keeps
+    catch-up a steady recovery, never an instant burst. Never sends outside the
+    window. ``<= now`` means 'go now'."""
     import random
     from datetime import timedelta
 
@@ -204,10 +214,23 @@ def next_action_at(account, action_type):
     cap = cap_for(account, action_type)
     if cap <= 0:
         return next_send_time(account, now)
+    if not is_send_time(account):
+        return next_send_time(account, now)
+
     spacing = _window_seconds(account) / cap
-    last = _last_action_at(account, action_type)
-    base = now if last is None else last + timedelta(seconds=spacing * random.uniform(0.75, 1.25))
-    return next_send_time(account, base if base > now else now)
+    sent = daily_count(account, action_type)
+    # Anchor the next send to its slot in today's window (not to the last send),
+    # so lost time is recoverable.
+    slot = _window_open_today(account, now) + timedelta(seconds=sent * spacing)
+    slot += timedelta(seconds=random.uniform(-0.2, 0.2) * spacing)  # jitter
+
+    if slot <= now:  # on-schedule or behind → eligible, but floor the gap
+        last = _last_action_at(account, action_type)
+        min_gap = spacing * 0.4
+        if last is not None and (now - last).total_seconds() < min_gap:
+            return last + timedelta(seconds=min_gap)
+        return now
+    return slot  # ahead of schedule → wait for the slot
 
 
 def account_pool(campaign):

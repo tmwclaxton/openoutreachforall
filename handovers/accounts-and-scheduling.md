@@ -19,10 +19,14 @@ connect cap is picked randomly in range, **stable per (account, day)** via a det
 `send_weekdays` (default Mon–Fri), `skip_bank_holidays` + `holiday_country` (**dropdown** from the `holidays`
 lib's supported countries; friendly names). Sends only inside this local window/weekdays, skipping bank holidays.
 
-### Paced "drip"
-`limits.next_action_at(account, action)` spaces each action type's daily cap evenly across the send window
-with ±25% jitter (e.g. 25 connects ≈ 1 every ~19 min over a 10h day), never outside the window. Executor
-defers a due state to that slot. Gated by `conf.ENABLE_ACTION_PACING` (**True** in prod, off in tests via conftest).
+### Paced "drip" — schedule-anchored (catches up)
+`limits.next_action_at(account, action)` pegs send #N of the day to `window_open + N*spacing`
+(spacing = window/cap), with jitter — NOT to the last send. So it spreads the cap evenly across the window
+**and self-corrects**: if it falls behind (slow cycle, restart, stall) it catches up toward the cap instead
+of drifting; a `min_gap` floor (0.4×spacing) keeps catch-up a steady recovery, never an instant burst. Never
+sends outside the window. Gated by `conf.ENABLE_ACTION_PACING` (**True** in prod, off in tests via conftest).
+(Earlier last-action-chained pacing couldn't recover lost time — after a morning stall it just plodded at
+1/spacing and undershot the daily cap. Fixed 2026-06-09.)
 
 ## Wait steps = next working day, random time
 `limits.random_slot_in_working_days(account, days)` — "Wait N days" resolves to **N working days ahead**

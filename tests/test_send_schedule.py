@@ -41,21 +41,34 @@ def test_next_send_time_jumps_to_window_open():
 
 
 @pytest.mark.django_db
-def test_pacing_defers_after_a_recent_action(monkeypatch):
+def test_pacing_ahead_defers_to_slot(monkeypatch):
+    """Already sent more than the schedule expects by now → wait for the slot."""
     monkeypatch.setattr(conf, "ENABLE_ACTION_PACING", True)
     from django.utils import timezone
 
-    from linkedin.models import ActionLog, Campaign
-    a = _account(daily_caps_json={"connect": 25})
-    camp = Campaign.objects.create(name="c-sched")
-    # Inside the window, with a connect just logged → next must be in the future,
-    # within roughly one even slot (10h/25 ≈ 24 min, ±25% jitter).
-    ActionLog.objects.create(linkedin_profile=a, campaign=camp, action_type="connect")
+    a = _account(daily_caps_json={"connect": 8})  # 8h window / 8 = 1h spacing
     monkeypatch.setattr(limits, "is_send_time", lambda acc, dt=None: True)
-    monkeypatch.setattr(limits, "next_send_time", lambda acc, dt=None: dt)
+    # Window opened ~30 min ago; we've already sent 3 → next slot is far ahead.
+    monkeypatch.setattr(limits, "_window_open_today", lambda acc, now: now - timedelta(minutes=30))
+    monkeypatch.setattr(limits, "daily_count", lambda acc, at, date=None: 3)
     slot = limits.next_action_at(a, "connect")
-    delta = (slot - timezone.now()).total_seconds()
-    assert 60 < delta < 40 * 60  # spaced out, not immediate
+    assert (slot - timezone.now()).total_seconds() > 60 * 60  # ~2h out (3rd slot), in the future
+
+
+@pytest.mark.django_db
+def test_pacing_behind_catches_up(monkeypatch):
+    """Behind the schedule (e.g. after a stall) → eligible now to catch up."""
+    monkeypatch.setattr(conf, "ENABLE_ACTION_PACING", True)
+    from django.utils import timezone
+
+    a = _account(daily_caps_json={"connect": 25})
+    monkeypatch.setattr(limits, "is_send_time", lambda acc, dt=None: True)
+    # Window opened 5h ago; only sent 2 → way behind → fire now.
+    monkeypatch.setattr(limits, "_window_open_today", lambda acc, now: now - timedelta(hours=5))
+    monkeypatch.setattr(limits, "daily_count", lambda acc, at, date=None: 2)
+    monkeypatch.setattr(limits, "_last_action_at", lambda acc, at: None)
+    slot = limits.next_action_at(a, "connect")
+    assert (slot - timezone.now()).total_seconds() <= 0  # go now
 
 
 @pytest.mark.django_db
