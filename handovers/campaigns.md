@@ -6,7 +6,7 @@
 - **Create campaign** natively: name + sequence + optional lead list; launch active.
 - Per-campaign **Pause / Activate / Archive** (status pills). Pause sets active lead states → `paused_manual`; Activate resumes them (due now) + enrolls new leads; Archive = soft (terminal, hidden).
 - **Add leads** — attach any lead list to a campaign (a campaign can accumulate from several lists).
-- **Leads** view per campaign: stage + AI score, sortable/filterable by state.
+- **Click a campaign (name or "View")** → full detail panel: overview (sequence, list, status), **stat tiles** (enrolled/active/completed/replied/connections/messages/inmails/replies), **Leads** table (stage + AI score, sortable/filterable), **Responses** (inbound replies), **Activity** (recent actions). Endpoint `api/campaign/<id>/detail/` + `api/campaign/<id>/leads/`.
 - Worker auto-enrolls active campaigns each cycle (`enroll_active_campaigns`) so lists still filling get picked up.
 
 ## Contact-once dedup (important)

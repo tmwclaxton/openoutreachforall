@@ -32,6 +32,10 @@
     .tablescroll { overflow-x: auto; }
     .tablescroll table { min-width: 760px; }
     h2 { font-size: 15px; margin-top: 24px; }
+    h3 { font-size: 13px; margin: 22px 0 8px; color: #374151; }
+    .feedrow { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 9px 12px; margin-bottom: 8px; font-size: 13px; }
+    .feedbody { margin-top: 4px; white-space: pre-wrap; color: #111827; }
+    .actpill { display: inline-block; background: #eef2ff; color: #3730a3; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600; text-transform: capitalize; }
     table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; }
     th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid #f1f5f9; font-size: 13px; } th { background: #f9fafb; color: #6b7280; }
     select, input { padding: 7px 8px; border-radius: 7px; border: 1px solid #d1d5db; font-size: 13px; }
@@ -254,7 +258,12 @@
       <table id="camps"><thead><tr><th>Name</th><th>Sequence</th><th>Lead list</th><th>Leads</th><th>Status</th><th>Add leads</th><th>Actions</th></tr></thead><tbody></tbody></table>
 
       <div id="camplead-panel" style="display:none">
-        <h2 id="camplead-title">Leads</h2>
+        <p><a href="#" onclick="closeCampaign();return false">← Back to campaigns</a></p>
+        <h2 id="cd-title">Campaign</h2>
+        <div class="hint" id="cd-meta"></div>
+        <div class="kpis" id="cd-stats" style="margin:14px 0"></div>
+
+        <h3>Leads</h3>
         <div class="bar">
           <label>State:</label> <select id="campstate"><option value="">All</option><option value="active">Active</option><option value="completed">Completed</option><option value="stopped_reply">Replied</option><option value="paused_manual">Paused</option><option value="archived">Archived</option></select>
         </div>
@@ -263,6 +272,12 @@
           <th onclick="sortCamp('company')">Company</th><th onclick="sortCamp('ai_score')">AI score ▾</th>
           <th onclick="sortCamp('stage')">Stage</th><th onclick="sortCamp('state')">State</th><th></th>
         </tr></thead><tbody></tbody></table>
+
+        <h3>Responses</h3>
+        <div id="cd-responses"></div>
+
+        <h3>Activity</h3>
+        <div id="cd-activity"></div>
       </div>
     </div>
 
@@ -448,11 +463,12 @@
         const toggle = c.status === "active"
           ? `<button onclick="setCampStatus(${c.id},'paused')">⏸ Pause</button>`
           : `<button onclick="setCampStatus(${c.id},'active')">▶ Activate</button>`;
+        const nm = (c.name||'').replace(/'/g,"\\'");
         return `<tr>
-          <td><b>${c.name}</b></td><td>${c.sequence}</td><td>${c.lead_list||"—"}</td><td>${c.leads}</td>
+          <td><a href="#" onclick="openCampaign(${c.id},'${nm}');return false"><b>${c.name}</b></a></td><td>${c.sequence}</td><td>${c.lead_list||"—"}</td><td>${c.leads}</td>
           <td><span class="pill ${c.status}">${STATUS_LABEL[c.status]||c.status}</span></td>
           <td>${listSelect(c.id)} <button onclick="addLeads(${c.id})">+ Add</button></td>
-          <td>${toggle} <button onclick="viewCampLeads(${c.id}, '${(c.name||'').replace(/'/g,"\\'")}')">Leads</button> <button class="no" onclick="setCampStatus(${c.id},'archived')">🗑 Archive</button></td>
+          <td>${toggle} <button onclick="openCampaign(${c.id}, '${nm}')">View</button> <button class="no" onclick="setCampStatus(${c.id},'archived')">🗑 Archive</button></td>
         </tr>`;
       }).join("") || `<tr><td colspan="7">No campaigns yet — create one above.</td></tr>`;
     }
@@ -477,12 +493,32 @@
       j(`api/campaign/${id}/add-leads/`, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({list_id})})
         .then(r => { if(r.ok){ alert(`Added ${r.enrolled} leads (${r.skipped_duplicate} skipped — already in a campaign).`); loadCampaigns(); } else alert(r.error||"failed"); });
     };
-    window.viewCampLeads = (id, name) => {
+    window.closeCampaign = () => { document.getElementById("camplead-panel").style.display = "none"; };
+    window.openCampaign = (id, name) => {
       document.getElementById("camplead-panel").style.display = "block";
-      document.getElementById("camplead-title").textContent = "Leads — " + name;
+      document.getElementById("cd-title").textContent = name;
+      document.getElementById("cd-meta").textContent = "";
+      document.getElementById("cd-stats").innerHTML = "";
+      document.getElementById("cd-responses").innerHTML = `<div class="hint">Loading…</div>`;
+      document.getElementById("cd-activity").innerHTML = "";
       document.getElementById("campstate").onchange = renderCampLeads;
-      j(`api/campaign/${id}/leads/`).then(d => { CAMP_LEADS = d.leads; renderCampLeads();
-        document.getElementById("camplead-panel").scrollIntoView({behavior:"smooth"}); });
+      // Overview + stats + activity + responses
+      j(`api/campaign/${id}/detail/`).then(d => {
+        document.getElementById("cd-title").innerHTML = `${d.name} <span class="pill ${d.status}">${STATUS_LABEL[d.status]||d.status}</span>`;
+        document.getElementById("cd-meta").textContent = `Sequence: ${d.sequence||"—"}  ·  Primary lead list: ${d.lead_list||"—"}`;
+        const S = d.stats;
+        const tiles = [["Enrolled",S.enrolled],["Active",S.active],["Completed",S.completed],["Replied",S.replied],["Connections",S.connections],["Messages",S.messages],["InMails",S.inmails],["Replies",S.replies]];
+        document.getElementById("cd-stats").innerHTML = tiles.map(([l,v]) => `<div class="kpi"><div class="label">${l}</div><div class="value">${v}</div></div>`).join("");
+        document.getElementById("cd-responses").innerHTML = d.responses.length
+          ? d.responses.map(r => `<div class="feedrow"><div><b>${r.lead_name}</b> <span class="hint">${r.at}</span> <a href="${r.lead_url}" target="_blank">↗</a></div><div class="feedbody">${esc(r.body)}</div></div>`).join("")
+          : `<div class="hint">No replies yet.</div>`;
+        document.getElementById("cd-activity").innerHTML = d.activity.length
+          ? d.activity.map(a => `<div class="feedrow"><span class="actpill">${a.action}</span> <span class="hint">${a.at} · ${a.account}</span></div>`).join("")
+          : `<div class="hint">No activity yet.</div>`;
+      });
+      // Leads table
+      j(`api/campaign/${id}/leads/`).then(d => { CAMP_LEADS = d.leads; renderCampLeads(); });
+      document.getElementById("camplead-panel").scrollIntoView({behavior:"smooth"});
     };
     window.sortCamp = (k) => { if (CAMP_SORT===k) CAMP_DESC = !CAMP_DESC; else { CAMP_SORT = k; CAMP_DESC = (k==="ai_score"); } renderCampLeads(); };
     function renderCampLeads(){

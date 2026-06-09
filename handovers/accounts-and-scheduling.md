@@ -24,8 +24,12 @@ lib's supported countries; friendly names). Sends only inside this local window/
 with ±25% jitter (e.g. 25 connects ≈ 1 every ~19 min over a 10h day), never outside the window. Executor
 defers a due state to that slot. Gated by `conf.ENABLE_ACTION_PACING` (**True** in prod, off in tests via conftest).
 
+## Wait steps = next working day, random time
+`limits.random_slot_in_working_days(account, days)` — "Wait N days" resolves to **N working days ahead**
+(skipping non-working weekdays + bank holidays), at a **random time within the send window** (not exact 24h).
+Used by `executor._handle_wait`. So "wait 1 day" from a Friday → a random in-window time on Monday.
+
 ## Gotchas / notes
-- A `Wait N days` lands at the same clock time it started, so the next step can become due **after hours** and roll to the next morning. Considered: snap waits to window-start (not done; flag to Archie).
 - `holidays` is **pip-installed into the live containers** at runtime AND in `requirements/base.txt`. If a container is rebuilt from an old image without rebuilding, bank-holiday skipping goes inert (degrades gracefully). A proper image rebuild bakes it in.
 - Manual Unibox sends are **not** window-gated (user-initiated). Only the automated executor respects the window/pacing.
 

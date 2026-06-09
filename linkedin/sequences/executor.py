@@ -251,8 +251,13 @@ def _handle_inmail(session, state, step):
 
 
 def _handle_wait(session, state, step):
+    # "Wait N days" = N *working* days ahead, at a random time within the
+    # account's send window — not an exact 24h, and never on a non-working day.
+    from linkedin.accounts.limits import random_slot_in_working_days
+
     days = int(step.config.get("days", 0))
-    _goto(state, step.next_step(Branch.SUCCESS), delay=timedelta(days=days))
+    due = random_slot_in_working_days(session.linkedin_profile, days)
+    _goto(state, step.next_step(Branch.SUCCESS), delay=(due - timezone.now()))
 
 
 def _handle_end(session, state, step):

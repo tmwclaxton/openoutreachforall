@@ -39,6 +39,7 @@ urlpatterns = [
     path("api/campaign/<int:campaign_id>/update/", views.api_campaign_update, name="dashboard_api_campaign_update"),
     path("api/campaign/<int:campaign_id>/add-leads/", views.api_campaign_add_leads, name="dashboard_api_campaign_add_leads"),
     path("api/campaign/<int:campaign_id>/leads/", views.api_campaign_leads, name="dashboard_api_campaign_leads"),
+    path("api/campaign/<int:campaign_id>/detail/", views.api_campaign_detail, name="dashboard_api_campaign_detail"),
     path("api/inbox/accounts/", views.api_inbox_accounts, name="dashboard_api_inbox_accounts"),
     path("api/inbox/threads/", views.api_inbox_threads, name="dashboard_api_inbox_threads"),
     path("api/inbox/thread/<int:thread_id>/", views.api_inbox_thread, name="dashboard_api_inbox_thread"),

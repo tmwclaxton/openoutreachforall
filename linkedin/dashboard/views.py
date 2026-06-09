@@ -528,6 +528,66 @@ def api_campaign_leads(request, campaign_id):
 
 
 @staff_member_required
+def api_campaign_detail(request, campaign_id):
+    """Everything about one campaign: meta, stats, recent activity, and the
+    replies that have come in."""
+    from collections import Counter
+
+    from django.utils import timezone as _tz
+
+    from linkedin.models import ActionLog, Campaign, LeadCampaignState, Message
+
+    c = Campaign.objects.select_related("sequence", "lead_list").filter(pk=campaign_id).first()
+    if not c:
+        return JsonResponse({"error": "not found"}, status=404)
+
+    def when(dt):
+        return _tz.localtime(dt).strftime("%-d %b %H:%M") if dt else ""
+
+    state_counts = Counter(
+        LeadCampaignState.objects.filter(campaign=c).values_list("state", flat=True)
+    )
+    action_counts = Counter(
+        ActionLog.objects.filter(campaign=c).values_list("action_type", flat=True)
+    )
+    # Recent activity — what the tool did, newest first.
+    activity = [
+        {"action": a.action_type, "at": when(a.created_at),
+         "account": a.linkedin_profile.linkedin_username if a.linkedin_profile_id else ""}
+        for a in ActionLog.objects.filter(campaign=c).select_related("linkedin_profile").order_by("-created_at")[:40]
+    ]
+    # Replies from this campaign's leads, newest first.
+    reply_qs = (
+        Message.objects.filter(direction="in", thread__lead__campaign_states__campaign=c)
+        .select_related("thread__lead").order_by("-sent_at").distinct()[:40]
+    )
+    responses = [
+        {"lead_name": _lead_name(m.thread.lead), "lead_url": m.thread.lead.linkedin_url,
+         "body": m.body, "at": when(m.sent_at)}
+        for m in reply_qs
+    ]
+
+    return JsonResponse({
+        "id": c.pk, "name": c.name, "status": c.status,
+        "sequence": c.sequence.name if c.sequence else "",
+        "lead_list": c.lead_list.name if c.lead_list else "",
+        "stats": {
+            "enrolled": sum(state_counts.values()),
+            "active": state_counts.get("active", 0),
+            "completed": state_counts.get("completed", 0),
+            "replied": state_counts.get("stopped_reply", 0),
+            "paused": state_counts.get("paused_manual", 0),
+            "connections": action_counts.get("connect", 0),
+            "messages": action_counts.get("message", 0),
+            "inmails": action_counts.get("inmail", 0),
+            "replies": len(responses),
+        },
+        "activity": activity,
+        "responses": responses,
+    })
+
+
+@staff_member_required
 def api_inbox_accounts(request):
     from linkedin.models import LinkedInProfile
 

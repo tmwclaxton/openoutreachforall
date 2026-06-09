@@ -150,6 +150,35 @@ def _window_seconds(account) -> float:
     return hours * 3600.0
 
 
+def random_slot_in_working_days(account, days, base=None):
+    """A datetime ``days`` *working* days ahead (skipping non-working days and
+    bank holidays per the account's schedule), at a RANDOM time within that day's
+    send window. So "wait 1 day" = next working day, spread out — not exactly 24h.
+    ``days`` < 1 is treated as 1 (a wait always crosses into a future working day)."""
+    import random
+    from datetime import datetime as _dt, timedelta
+
+    base = base or timezone.now()
+    tz = _account_tz(account)
+    local = base.astimezone(tz)
+    weekdays = account.send_weekdays or [0, 1, 2, 3, 4]
+
+    def working(d):
+        return d.weekday() in weekdays and not _is_bank_holiday(account, d)
+
+    day = local.date()
+    needed = max(1, int(days))
+    while needed > 0:
+        day = day + timedelta(days=1)
+        if working(day):
+            needed -= 1
+
+    sh, eh = account.send_start_hour, account.send_end_hour
+    offset = random.randint(0, max(1, (eh - sh)) * 3600 - 1)
+    slot = _dt(day.year, day.month, day.day, sh, 0, 0) + timedelta(seconds=offset)
+    return slot.replace(tzinfo=tz)
+
+
 def _last_action_at(account, action_type):
     from linkedin.models import ActionLog
 
