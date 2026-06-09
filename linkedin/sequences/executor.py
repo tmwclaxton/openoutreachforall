@@ -287,8 +287,8 @@ def _handle_profile_visit(session, state, step):
 
 
 def _handle_like_post(session, state, step):
-    like_recent_post(session, state)
-    _log(session, state, step, ActionLog.ActionType.LIKE_POST)
+    result = like_recent_post(session, state) or {}
+    _log(session, state, step, ActionLog.ActionType.LIKE_POST, target_url=result.get("post_url", ""))
     _goto(state, step.next_step(Branch.SUCCESS))
 
 
@@ -341,7 +341,7 @@ def _set_state(state, new_state):
     state.save(update_fields=["state"])
 
 
-def _log(session, state, step, action_type):
+def _log(session, state, step, action_type, target_url=""):
     from linkedin.accounts.limits import record_action
 
     ActionLog.objects.create(
@@ -350,6 +350,7 @@ def _log(session, state, step, action_type):
         lead=state.lead,
         action_type=action_type,
         sequence_step=step,
+        target_url=target_url or "",
     )
     record_action(session.linkedin_profile, action_type)
 

@@ -323,6 +323,8 @@ class ActionLog(models.Model):
         on_delete=models.SET_NULL, related_name="action_logs",
     )
     action_type = models.CharField(max_length=20, choices=ActionType.choices)
+    # Optional target the action touched — e.g. the URL of a post that was liked.
+    target_url = models.CharField(max_length=600, blank=True, default="")
     sequence_step = models.ForeignKey(
         "linkedin.SequenceStep", null=True, blank=True,
         on_delete=models.SET_NULL, related_name="action_logs",

@@ -257,6 +257,32 @@ def api_delete_step(request, step_id):
     return JsonResponse({"ok": True})
 
 
+def _accepted_count(campaign_id=None):
+    """How many leads accepted our connection request — derived from where they
+    are in the flow (past the connect step, on its 'accepted' branch), so it's
+    correct retroactively (not reliant on the connect_accepted event existing).
+    Counts across all sequence campaigns, or one if a campaign id is given."""
+    from linkedin.models import Campaign, LeadCampaignState, SequenceStep
+
+    qs = Campaign.objects.filter(sequence__isnull=False).select_related("sequence")
+    if campaign_id:
+        qs = qs.filter(pk=campaign_id)
+    total = 0
+    for c in qs:
+        root = c.sequence.root_step if c.sequence_id else None
+        if not root or root.step_type != SequenceStep.StepType.CONNECT:
+            continue
+        # All step ids reachable down the connect's SUCCESS (accepted) branch.
+        ids, stack = set(), list(root.children.filter(branch=SequenceStep.Branch.SUCCESS))
+        while stack:
+            s = stack.pop()
+            ids.add(s.id)
+            stack.extend(list(s.children.all()))
+        if ids:
+            total += LeadCampaignState.objects.filter(campaign=c, current_step_id__in=ids).count()
+    return total
+
+
 def _lead_name(lead):
     if lead.first_name and lead.last_name:
         return f"{lead.first_name} {lead.last_name}".strip()
@@ -550,11 +576,14 @@ def api_campaign_detail(request, campaign_id):
     action_counts = Counter(
         ActionLog.objects.filter(campaign=c).values_list("action_type", flat=True)
     )
-    # Recent activity — what the tool did, newest first.
+    # Recent activity — what the tool did, newest first (with who + post link).
     activity = [
         {"action": a.action_type, "at": when(a.created_at),
+         "lead": _lead_name(a.lead) if a.lead_id else "—",
+         "lead_url": a.lead.linkedin_url if a.lead_id else "",
+         "post_url": a.target_url,
          "account": a.linkedin_profile.linkedin_username if a.linkedin_profile_id else ""}
-        for a in ActionLog.objects.filter(campaign=c).select_related("linkedin_profile").order_by("-created_at")[:40]
+        for a in ActionLog.objects.filter(campaign=c).select_related("linkedin_profile", "lead").order_by("-created_at")[:40]
     ]
     # Replies from this campaign's leads, newest first — ONLY on threads we
     # actually messaged (contacted_by_tool), so the account's pre-existing
@@ -581,8 +610,9 @@ def api_campaign_detail(request, campaign_id):
             "active": state_counts.get("active", 0),
             "completed": state_counts.get("completed", 0),
             "connections": action_counts.get("connect", 0),
-            "accepted": action_counts.get("connect_accepted", 0),
+            "accepted": _accepted_count(c.pk),
             "messages": action_counts.get("message", 0),
+            "posts_liked": action_counts.get("like_post", 0),
             "inmails": action_counts.get("inmail", 0),
             "replies": len(responses),
         },
@@ -1055,7 +1085,7 @@ def api_kpis(request):
 
     return JsonResponse({
         "connection_requests": actions("connect"),
-        "connections_accepted": actions("connect_accepted"),
+        "connections_accepted": _accepted_count(campaign),
         "messages_sent": actions("message"),
         "inmails_sent": actions("inmail"),
         "posts_liked": actions("like_post"),
@@ -1096,6 +1126,7 @@ def api_activity(request):
             "action": a.action_type,
             "lead": _lead_name(a.lead) if a.lead_id else "—",
             "lead_url": a.lead.linkedin_url if a.lead_id else "",
+            "post_url": a.target_url,
             "at": timezone.localtime(a.created_at).strftime("%-d %b %H:%M"),
             "account": a.linkedin_profile.linkedin_username if a.linkedin_profile_id else "",
         }

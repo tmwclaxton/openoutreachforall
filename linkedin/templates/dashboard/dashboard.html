@@ -518,13 +518,18 @@
         document.getElementById("cd-title").innerHTML = `${d.name} <span class="pill ${d.status}">${STATUS_LABEL[d.status]||d.status}</span>`;
         document.getElementById("cd-meta").textContent = `Sequence: ${d.sequence||"—"}  ·  Primary lead list: ${d.lead_list||"—"}`;
         const S = d.stats;
-        const tiles = [["Enrolled",S.enrolled],["Active",S.active],["Completed",S.completed],["Connection requests",S.connections],["Accepted",S.accepted],["Messages",S.messages],["InMails",S.inmails],["Replies",S.replies]];
+        const tiles = [
+          ["Connections sent",S.connections],["Connections accepted",S.accepted],
+          ["Messages sent",S.messages],["Posts liked",S.posts_liked],
+          ["InMails — to non-accepters",S.inmails],["Replies",S.replies],
+          ["Active",S.active],["Completed",S.completed],
+        ];
         document.getElementById("cd-stats").innerHTML = tiles.map(([l,v]) => `<div class="kpi"><div class="label">${l}</div><div class="value">${v}</div></div>`).join("");
         document.getElementById("cd-responses").innerHTML = d.responses.length
           ? d.responses.map(r => `<div class="feedrow"><div><b>${r.lead_name}</b> <span class="hint">${r.at}</span> <a href="${r.lead_url}" target="_blank">↗</a></div><div class="feedbody">${esc(r.body)}</div></div>`).join("")
           : `<div class="hint">No replies yet.</div>`;
         document.getElementById("cd-activity").innerHTML = d.activity.length
-          ? d.activity.map(a => `<div class="feedrow"><span class="actpill">${a.action}</span> <span class="hint">${a.at} · ${a.account}</span></div>`).join("")
+          ? d.activity.map(a => activityRow(a)).join("")
           : `<div class="hint">No activity yet.</div>`;
       });
       // Leads table
@@ -788,6 +793,11 @@
       if (KCHART) { KCHART.data = data; KCHART.update(); }
       else KCHART = new Chart(ctx, { type:"line", data, options:opts });
     }
+    function activityRow(a){
+      const lead = a.lead && a.lead !== "—" ? ` — <b>${a.lead}</b>${a.lead_url?` <a href="${a.lead_url}" target="_blank">↗</a>`:""}` : "";
+      const post = (a.action === "like_post" && a.post_url) ? ` · <a href="${a.post_url}" target="_blank">see post</a>` : "";
+      return `<div class="feedrow"><span>${ACT_LABEL[a.action]||a.action}${lead}${post}</span> <span class="hint">${a.at} · ${a.account}</span></div>`;
+    }
     function loadActivity(){
       const days = document.getElementById("dashdays").value;
       const camp = document.getElementById("dashcamp").value;
@@ -796,9 +806,7 @@
       const p = new URLSearchParams({days}); if (camp) p.set("campaign", camp); if (acct) p.set("account", acct); if (type) p.set("type", type);
       j("api/activity/?"+p.toString()).then(d => {
         const el = document.getElementById("activityfeed");
-        el.innerHTML = d.activity.length ? d.activity.map(a =>
-          `<div class="feedrow"><span>${ACT_LABEL[a.action]||a.action} — <b>${a.lead}</b>${a.lead_url?` <a href="${a.lead_url}" target="_blank">↗</a>`:""}</span> <span class="hint">${a.at} · ${a.account}</span></div>`
-        ).join("") : `<div class="hint">No activity in this range yet.</div>`;
+        el.innerHTML = d.activity.length ? d.activity.map(activityRow).join("") : `<div class="hint">No activity in this range yet.</div>`;
       });
     }
     function loadDash(){

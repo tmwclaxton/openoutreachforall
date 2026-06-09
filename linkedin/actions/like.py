@@ -37,10 +37,20 @@ def _like(session, lead) -> dict:
     if like.count() == 0:
         return {"success": False, "error": "no Like button found (no recent posts?)"}
 
+    # Best-effort: capture the post's permalink so "see what post" can link to it.
+    # Falls back to the lead's recent-activity page if the urn can't be read.
+    post_url = url
+    try:
+        urn = like.locator("xpath=ancestor::*[@data-urn][1]").first.get_attribute("data-urn")
+        if urn and "urn:li:activity" in urn:
+            post_url = f"https://www.linkedin.com/feed/update/{urn}/"
+    except Exception:
+        pass
+
     if (like.get_attribute("aria-pressed") or "").lower() == "true":
         logger.info("Most recent post already liked for %s", lead.public_identifier)
-        return {"success": True, "already_liked": True}
+        return {"success": True, "already_liked": True, "post_url": post_url}
 
     like.click()
     logger.info("Liked most recent post for %s", lead.public_identifier)
-    return {"success": True, "already_liked": False}
+    return {"success": True, "already_liked": False, "post_url": post_url}
