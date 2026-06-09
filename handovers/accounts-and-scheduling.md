@@ -29,6 +29,9 @@ defers a due state to that slot. Gated by `conf.ENABLE_ACTION_PACING` (**True** 
 (skipping non-working weekdays + bank holidays), at a **random time within the send window** (not exact 24h).
 Used by `executor._handle_wait`. So "wait 1 day" from a Friday → a random in-window time on Monday.
 
+## Worker loop cadence (why pacing was firing too slowly)
+The worker (`run_worker.py`) must run the **sender (`run_due_states`) first and every cycle**, or paced actions wait behind slow work. Bug found 2026-06-09: `poll_replies` re-scraped *every* lead's conversation each cycle (~30 min/cycle), so only ~1 connect fired per 30 min → ~5/day. Fixed: sender runs first every cycle; `poll_replies(limit=12)` is bounded (ordered by most-recent activity, rotates coverage); heavy work (`process_pending_searches`/`backfill`/`score`) runs every ~10 min (`HEAVY_EVERY`). Keep the sender unblocked — don't put slow per-lead scraping ahead of it.
+
 ## Gotchas / notes
 - `holidays` is **pip-installed into the live containers** at runtime AND in `requirements/base.txt`. If a container is rebuilt from an old image without rebuilding, bank-holiday skipping goes inert (degrades gracefully). A proper image rebuild bakes it in.
 - Manual Unibox sends are **not** window-gated (user-initiated). Only the automated executor respects the window/pacing.

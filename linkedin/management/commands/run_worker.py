@@ -24,6 +24,10 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"worker started for {profile.linkedin_username}"))
 
         interval = options["interval"]
+        # Heavy, less-urgent work (reply backfill scrapes, lead enrichment,
+        # scoring) runs on its own slower clock so it can't starve the sender.
+        HEAVY_EVERY = 600  # seconds
+        last_heavy = 0.0
         while True:
             from django.db import connection
 
@@ -31,21 +35,26 @@ class Command(BaseCommand):
             # web process (e.g. a freshly queued search).
             connection.close()
             try:
-                # Poll FIRST so a reply flips the lead to stopped_reply before the
-                # executor would otherwise fire its follow-up.
-                stopped = poll_replies(session)
-                manual = process_pending_sends(session)
-                # Pick up leads added to a campaign after launch (lists still filling).
+                # Sender FIRST and every cycle, so paced actions fire on schedule
+                # instead of waiting behind the slow reply/enrichment work.
                 enrolled = enroll_active_campaigns()
                 executed = run_due_states(session)
-                # Cap dashboard searches so enrichment doesn't block the cycle for hours.
-                searched = process_pending_searches(session, cap=30)
-                backfilled = backfill_lead_profiles(session, limit=8)
-                scored = score_pending_leads(limit=15)
+                manual = process_pending_sends(session)
+                # Bounded reply scan every cycle (each scan is a live fetch).
+                stopped = poll_replies(session, limit=12)
+
+                extra = ""
+                now = time.monotonic()
+                if now - last_heavy >= HEAVY_EVERY:
+                    searched = process_pending_searches(session, cap=30)
+                    backfilled = backfill_lead_profiles(session, limit=8)
+                    scored = score_pending_leads(limit=15)
+                    last_heavy = now
+                    extra = f" searches={searched} backfilled={backfilled} scored={scored}"
+
                 self.stdout.write(
-                    f"cycle: replies_stopped={stopped} manual_sent={manual} "
-                    f"enrolled={enrolled['enrolled']} executed={executed} "
-                    f"searches={searched} backfilled={backfilled} scored={scored}",
+                    f"cycle: executed={executed} enrolled={enrolled['enrolled']} "
+                    f"manual_sent={manual} replies_stopped={stopped}{extra}",
                     ending="\n",
                 )
             except Exception as exc:  # keep the worker alive across transient errors

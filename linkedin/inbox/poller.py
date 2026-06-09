@@ -103,9 +103,13 @@ def process_pending_sends(session) -> int:
     return sent
 
 
-def poll_replies(session, campaign=None) -> int:
+def poll_replies(session, campaign=None, limit=None) -> int:
     """Poll active sequence leads; persist messages; stop any that replied.
     Returns the number of states transitioned to ``stopped_reply``.
+
+    ``limit`` bounds how many leads are scanned per call (each scan is a live
+    Voyager conversation fetch) — the worker passes a small bound and orders by
+    most-recent activity so each cycle stays fast and coverage rotates.
     """
     from linkedin.models import LeadCampaignState, Message, MessageThread
 
@@ -116,9 +120,14 @@ def poll_replies(session, campaign=None) -> int:
     qs = LeadCampaignState.objects.filter(state__in=pollable)
     if campaign is not None:
         qs = qs.filter(campaign=campaign)
+    qs = qs.select_related("lead", "campaign")
+    if limit:
+        # Most-recently-actioned first — the leads most likely to have a fresh
+        # reply — then bound the scan so the cycle doesn't stall on a big list.
+        qs = qs.order_by("-last_action_at")[:limit]
 
     stopped = 0
-    for state in qs.select_related("lead", "campaign"):
+    for state in qs:
         messages = fetch_thread_messages(session, state.lead)
         thread, _ = MessageThread.objects.get_or_create(
             lead=state.lead, account=session.linkedin_profile,
