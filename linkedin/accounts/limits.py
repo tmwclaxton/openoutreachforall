@@ -23,6 +23,7 @@ def cap_for(account, action_type, date=None) -> int:
     # Connection requests can use a randomised daily cap within [min, max], picked
     # deterministically per (account, day) so it's stable across the day / restarts.
     if action_type == "connect" and getattr(account, "connect_random_enabled", False):
+        import hashlib
         import random as _random
 
         lo = int(account.connect_random_min or 0)
@@ -31,7 +32,11 @@ def cap_for(account, action_type, date=None) -> int:
             lo, hi = hi, lo
         if hi > 0:
             d = date or timezone.now().date()
-            seed = account.pk * 1_000_000 + d.toordinal()  # stable, not process-salted
+            # Hash the (account, day) so consecutive days decorrelate — gives a
+            # genuinely varied daily number (odds included), not clustered on
+            # round/boundary values. Still deterministic per day (restart-safe).
+            digest = hashlib.sha256(f"{account.pk}:{d.toordinal()}".encode()).digest()
+            seed = int.from_bytes(digest[:8], "big")
             return _random.Random(seed).randint(lo, hi)
 
     caps = account.daily_caps_json or default_daily_caps()
