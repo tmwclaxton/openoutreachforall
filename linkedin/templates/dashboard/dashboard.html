@@ -149,6 +149,17 @@
       </div>
       <div class="kpis" id="kpis"></div>
       <div class="card"><canvas id="kpichart" height="90"></canvas></div>
+      <div class="card">
+        <div class="bar"><b>Activity</b> &nbsp; <select id="actfilter">
+          <option value="">All activity</option>
+          <option value="connect_accepted">Connections accepted</option>
+          <option value="like_post">Posts liked</option>
+          <option value="message">Messages sent</option>
+          <option value="connect">Connection requests</option>
+          <option value="inmail">InMails sent</option>
+        </select></div>
+        <div id="activityfeed"></div>
+      </div>
       <h2>Senders</h2>
       <table id="senders"><thead><tr><th>Account</th><th>Active</th><th>InMail</th><th>Connect/day</th><th>Message/day</th></tr></thead><tbody></tbody></table>
     </div>
@@ -745,7 +756,8 @@
         .then(r => { btn.textContent = "Find with AI"; btn.disabled = false; if(r.ok){ alert("AI search queued — leads appear in the list below in a couple of minutes. Hit refresh."); loadLeads(); } else alert(r.error||"failed"); });
     };
 
-    const KPI = { connection_requests:"Connection Requests", messages_sent:"Messages Sent", inmails_sent:"InMails Sent", replies:"Replies", active:"Active", completed:"Completed" };
+    const KPI = { connection_requests:"Connection Requests", connections_accepted:"Connections Accepted", messages_sent:"Messages Sent", inmails_sent:"InMails Sent", posts_liked:"Posts Liked", replies:"Replies", active:"Active", completed:"Completed" };
+    const ACT_LABEL = { connect:"🤝 Connection request", connect_accepted:"✅ Connection accepted", message:"✉️ Message sent", follow_up:"✉️ Follow-up", inmail:"📨 InMail sent", like_post:"👍 Liked post", profile_visit:"👁️ Viewed profile" };
     function dashQuery(){
       const days = document.getElementById("dashdays").value;
       const camp = document.getElementById("dashcamp").value;
@@ -776,12 +788,27 @@
       if (KCHART) { KCHART.data = data; KCHART.update(); }
       else KCHART = new Chart(ctx, { type:"line", data, options:opts });
     }
+    function loadActivity(){
+      const days = document.getElementById("dashdays").value;
+      const camp = document.getElementById("dashcamp").value;
+      const acct = document.getElementById("dashacct").value;
+      const type = document.getElementById("actfilter").value;
+      const p = new URLSearchParams({days}); if (camp) p.set("campaign", camp); if (acct) p.set("account", acct); if (type) p.set("type", type);
+      j("api/activity/?"+p.toString()).then(d => {
+        const el = document.getElementById("activityfeed");
+        el.innerHTML = d.activity.length ? d.activity.map(a =>
+          `<div class="feedrow"><span>${ACT_LABEL[a.action]||a.action} — <b>${a.lead}</b>${a.lead_url?` <a href="${a.lead_url}" target="_blank">↗</a>`:""}</span> <span class="hint">${a.at} · ${a.account}</span></div>`
+        ).join("") : `<div class="hint">No activity in this range yet.</div>`;
+      });
+    }
     function loadDash(){
       const q = dashQuery();
       j("api/kpis/"+q).then(d => { document.getElementById("kpis").innerHTML = Object.entries(KPI).map(([k,l]) => `<div class="kpi"><div class="label">${l}</div><div class="value">${d[k]??0}</div></div>`).join(""); });
       j("api/kpi/timeseries/"+q).then(drawChart);
+      loadActivity();
     }
     ["dashdays","dashcamp","dashacct"].forEach(id => document.getElementById(id).onchange = loadDash);
+    document.getElementById("actfilter").onchange = loadActivity;
     j("api/campaigns/").then(d => {
       document.getElementById("dashcamp").innerHTML = `<option value="">All campaigns</option>` + (d.campaigns||[]).map(c=>`<option value="${c.id}">${c.name}</option>`).join("");
     });

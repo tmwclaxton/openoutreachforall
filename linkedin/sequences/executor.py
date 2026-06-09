@@ -212,6 +212,15 @@ def _handle_connect(session, state, step):
     # Decision phase: accepted → success branch, else → failure branch.
     accepted = is_connection_accepted(session, state)
     state.awaiting_decision = False
+    if accepted:
+        # Record the acceptance (a detected result of our outreach, not a capped
+        # action) so the dashboard can report connections accepted.
+        ActionLog.objects.create(
+            linkedin_profile=session.linkedin_profile,
+            campaign=state.campaign,
+            lead=state.lead,
+            action_type=ActionLog.ActionType.CONNECT_ACCEPTED,
+        )
     branch = Branch.SUCCESS if accepted else Branch.FAILURE
     _goto(state, step.next_step(branch))
 
@@ -338,6 +347,7 @@ def _log(session, state, step, action_type):
     ActionLog.objects.create(
         linkedin_profile=session.linkedin_profile,
         campaign=state.campaign,
+        lead=state.lead,
         action_type=action_type,
         sequence_step=step,
     )

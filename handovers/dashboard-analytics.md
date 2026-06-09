@@ -4,7 +4,8 @@
 
 ## What it does (Dashboard tab)
 - Filter bar: **Period** (All / 7 / 30 / 90 days / 12 months), **Campaign**, **Account**.
-- KPI tiles: Connection Requests, Messages Sent, InMails Sent, Replies, Active, Completed.
+- KPI tiles: Connection Requests, **Connections Accepted**, Messages Sent, InMails Sent, **Posts Liked**, Replies, Active, Completed.
+- **Activity feed** (`api/activity/`) with a type filter (All / accepted / likes / messages / connects / inmails), respecting the period/campaign/account filters — shows action + **lead name** + time + account. Acceptances are recorded as an `ActionLog` `connect_accepted` event when the executor detects a connection was accepted; `ActionLog.lead` now ties every action to who it was for. Everything here is the tool's own outreach only (ActionLog is written solely by the executor).
 - **HeyReach-style time-series chart** (Chart.js via CDN): connections / messages / inmails / replies per
   day→week→month (granularity auto-picks from the period), smooth multi-line area, filtered by all three filters.
 

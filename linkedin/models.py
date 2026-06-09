@@ -305,6 +305,7 @@ class ActionLog(models.Model):
         INMAIL = "inmail", "InMail"
         PROFILE_VISIT = "profile_visit", "Profile Visit"
         LIKE_POST = "like_post", "Like Post"
+        CONNECT_ACCEPTED = "connect_accepted", "Connection accepted"
 
     linkedin_profile = models.ForeignKey(
         LinkedInProfile,
@@ -315,6 +316,11 @@ class ActionLog(models.Model):
         Campaign,
         on_delete=models.CASCADE,
         related_name="action_logs",
+    )
+    # Which lead this action/event was for — lets the dashboard show who.
+    lead = models.ForeignKey(
+        "crm.Lead", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="action_logs",
     )
     action_type = models.CharField(max_length=20, choices=ActionType.choices)
     sequence_step = models.ForeignKey(

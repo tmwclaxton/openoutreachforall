@@ -1050,12 +1050,53 @@ def api_kpis(request):
 
     return JsonResponse({
         "connection_requests": actions("connect"),
+        "connections_accepted": actions("connect_accepted"),
         "messages_sent": actions("message"),
         "inmails_sent": actions("inmail"),
+        "posts_liked": actions("like_post"),
         "replies": replies_q.distinct().count(),
         "active": states(State.ACTIVE),
         "completed": states(State.COMPLETED),
     })
+
+
+@staff_member_required
+def api_activity(request):
+    """Recent actions/events this tool performed (filterable by period / campaign /
+    account / type) — connection requests, acceptances, likes, messages, InMails.
+    Only ever reflects the tool's own outreach (ActionLog is written by it alone)."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from linkedin.models import ActionLog
+
+    days = int(request.GET.get("days") or 0)
+    campaign = request.GET.get("campaign") or None
+    account = request.GET.get("account") or None
+    atype = request.GET.get("type") or None
+
+    qs = ActionLog.objects.select_related("lead", "linkedin_profile").order_by("-created_at")
+    if days:
+        qs = qs.filter(created_at__gte=timezone.now() - timedelta(days=days))
+    if campaign:
+        qs = qs.filter(campaign_id=campaign)
+    if account:
+        qs = qs.filter(linkedin_profile_id=account)
+    if atype:
+        qs = qs.filter(action_type=atype)
+
+    out = [
+        {
+            "action": a.action_type,
+            "lead": _lead_name(a.lead) if a.lead_id else "—",
+            "lead_url": a.lead.linkedin_url if a.lead_id else "",
+            "at": timezone.localtime(a.created_at).strftime("%-d %b %H:%M"),
+            "account": a.linkedin_profile.linkedin_username if a.linkedin_profile_id else "",
+        }
+        for a in qs[:120]
+    ]
+    return JsonResponse({"activity": out})
 
 
 @staff_member_required

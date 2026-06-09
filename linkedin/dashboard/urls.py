@@ -13,6 +13,7 @@ urlpatterns = [
     path("api/slack/test/", views.api_slack_test, name="dashboard_api_slack_test"),
     path("api/kpis/", views.api_kpis, name="dashboard_api_kpis"),
     path("api/kpi/timeseries/", views.api_kpi_timeseries, name="dashboard_api_kpi_timeseries"),
+    path("api/activity/", views.api_activity, name="dashboard_api_activity"),
     path("api/senders/", views.api_senders, name="dashboard_api_senders"),
     path("api/sequences/", views.api_sequences, name="dashboard_api_sequences"),
     path("api/sequence/<int:sequence_id>/", views.api_sequence, name="dashboard_api_sequence"),
