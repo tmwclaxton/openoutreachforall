@@ -60,7 +60,7 @@ def api_kpi_timeseries(request):
     connects = series(base.filter(action_type="connect"), "created_at")
     messages = series(base.filter(action_type="message"), "created_at")
     inmails = series(base.filter(action_type="inmail"), "created_at")
-    rep_qs = Message.objects.filter(direction="in")
+    rep_qs = Message.objects.filter(direction="in", thread__contacted_by_tool=True)
     if campaign:
         rep_qs = rep_qs.filter(thread__lead__campaign_states__campaign_id=campaign)
     if account:
@@ -556,9 +556,14 @@ def api_campaign_detail(request, campaign_id):
          "account": a.linkedin_profile.linkedin_username if a.linkedin_profile_id else ""}
         for a in ActionLog.objects.filter(campaign=c).select_related("linkedin_profile").order_by("-created_at")[:40]
     ]
-    # Replies from this campaign's leads, newest first.
+    # Replies from this campaign's leads, newest first — ONLY on threads we
+    # actually messaged (contacted_by_tool), so the account's pre-existing
+    # conversations don't get counted as replies to our outreach.
     reply_qs = (
-        Message.objects.filter(direction="in", thread__lead__campaign_states__campaign=c)
+        Message.objects.filter(
+            direction="in", thread__contacted_by_tool=True,
+            thread__lead__campaign_states__campaign=c,
+        )
         .select_related("thread__lead").order_by("-sent_at").distinct()[:40]
     )
     responses = [
@@ -575,9 +580,8 @@ def api_campaign_detail(request, campaign_id):
             "enrolled": sum(state_counts.values()),
             "active": state_counts.get("active", 0),
             "completed": state_counts.get("completed", 0),
-            "replied": state_counts.get("stopped_reply", 0),
-            "paused": state_counts.get("paused_manual", 0),
             "connections": action_counts.get("connect", 0),
+            "accepted": action_counts.get("connect_accepted", 0),
             "messages": action_counts.get("message", 0),
             "inmails": action_counts.get("inmail", 0),
             "replies": len(responses),
@@ -1040,7 +1044,8 @@ def api_kpis(request):
             q = q.filter(campaign_id=campaign)
         return q.count()
 
-    replies_q = MessageThread.objects.filter(messages__direction="in")
+    # Replies to OUR outreach only — threads this tool messaged.
+    replies_q = MessageThread.objects.filter(contacted_by_tool=True, messages__direction="in")
     if since:
         replies_q = replies_q.filter(messages__direction="in", messages__sent_at__gte=since)
     if campaign:

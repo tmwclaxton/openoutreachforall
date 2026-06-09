@@ -518,7 +518,7 @@
         document.getElementById("cd-title").innerHTML = `${d.name} <span class="pill ${d.status}">${STATUS_LABEL[d.status]||d.status}</span>`;
         document.getElementById("cd-meta").textContent = `Sequence: ${d.sequence||"—"}  ·  Primary lead list: ${d.lead_list||"—"}`;
         const S = d.stats;
-        const tiles = [["Enrolled",S.enrolled],["Active",S.active],["Completed",S.completed],["Replied",S.replied],["Connections",S.connections],["Messages",S.messages],["InMails",S.inmails],["Replies",S.replies]];
+        const tiles = [["Enrolled",S.enrolled],["Active",S.active],["Completed",S.completed],["Connection requests",S.connections],["Accepted",S.accepted],["Messages",S.messages],["InMails",S.inmails],["Replies",S.replies]];
         document.getElementById("cd-stats").innerHTML = tiles.map(([l,v]) => `<div class="kpi"><div class="label">${l}</div><div class="value">${v}</div></div>`).join("");
         document.getElementById("cd-responses").innerHTML = d.responses.length
           ? d.responses.map(r => `<div class="feedrow"><div><b>${r.lead_name}</b> <span class="hint">${r.at}</span> <a href="${r.lead_url}" target="_blank">↗</a></div><div class="feedbody">${esc(r.body)}</div></div>`).join("")

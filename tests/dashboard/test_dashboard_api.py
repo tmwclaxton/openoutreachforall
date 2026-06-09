@@ -35,10 +35,10 @@ class TestDashboardApi:
         ActionLog.objects.create(linkedin_profile=prof, campaign=camp, action_type="connect")
         ActionLog.objects.create(linkedin_profile=prof, campaign=camp, action_type="message")
         lead = Lead.objects.create(linkedin_url="https://www.linkedin.com/in/x/", public_identifier="x")
-        # Replies KPI = conversations with an inbound message.
+        # Replies KPI = conversations WE started (contacted_by_tool) with an inbound message.
         from linkedin.models import Message, MessageThread
 
-        thread = MessageThread.objects.create(lead=lead, account=prof)
+        thread = MessageThread.objects.create(lead=lead, account=prof, contacted_by_tool=True)
         Message.objects.create(thread=thread, direction="in", linkedin_message_id="r1")
 
         data = admin_client.get("/dashboard/api/kpis/").json()
