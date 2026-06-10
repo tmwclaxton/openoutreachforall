@@ -10,6 +10,8 @@ class Command(BaseCommand):
         parser.add_argument("--interval", type=int, default=120)
 
     def handle(self, *args, **options):
+        from linkedin_cli.exceptions import AuthenticationError, CheckpointChallengeError
+
         from linkedin.browser.registry import get_first_active_profile, get_or_create_session
         from linkedin.inbox.poller import poll_replies, process_pending_sends
         from linkedin.leads.importer import backfill_lead_profiles, process_pending_searches
@@ -57,6 +59,21 @@ class Command(BaseCommand):
                     f"manual_sent={manual} replies_stopped={stopped}{extra}",
                     ending="\n",
                 )
+            except CheckpointChallengeError as exc:
+                # LinkedIn security checkpoint — needs a human to clear it.
+                self.stderr.write(
+                    f"LinkedIn CHECKPOINT — manual login required: {getattr(exc, 'url', '') or exc!r}"[:200]
+                )
+            except AuthenticationError:
+                # Session 401'd — try to re-authenticate (cookies/login) and carry on.
+                self.stderr.write("Session 401 — re-authenticating…")
+                try:
+                    session.reauthenticate()
+                    self.stdout.write("re-authenticated OK")
+                except CheckpointChallengeError as exc:
+                    self.stderr.write(f"reauth hit CHECKPOINT — manual login required: {getattr(exc, 'url', '')}"[:200])
+                except Exception as exc:
+                    self.stderr.write(f"reauth failed: {exc!r}"[:200])
             except Exception as exc:  # keep the worker alive across transient errors
                 self.stderr.write(f"cycle error: {exc!r}"[:200])
             time.sleep(interval)

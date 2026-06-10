@@ -288,7 +288,12 @@ def _handle_profile_visit(session, state, step):
 
 def _handle_like_post(session, state, step):
     result = like_recent_post(session, state) or {}
-    _log(session, state, step, ActionLog.ActionType.LIKE_POST, target_url=result.get("post_url", ""))
+    # Only count a like that actually happened (a post existed and was liked) —
+    # not a no-op (no recent post / button missing).
+    if result.get("success"):
+        _log(session, state, step, ActionLog.ActionType.LIKE_POST, target_url=result.get("post_url", ""))
+    else:
+        logger.info("Like not recorded for %s (%s)", state.lead_id, result.get("error"))
     _goto(state, step.next_step(Branch.SUCCESS))
 
 
