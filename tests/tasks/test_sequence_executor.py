@@ -109,3 +109,35 @@ class TestSequenceExecutor:
         assert all(s.state == LeadCampaignState.State.COMPLETED for s in states)
         assert ActionLog.objects.filter(action_type="inmail").count() == 3
         assert ActionLog.objects.filter(action_type="message").count() == 0
+
+
+@pytest.mark.django_db
+def test_profile_visit_step_visits_lead_and_logs(fake_session):
+    """View Profile step navigates to the lead's profile and logs it against them."""
+    from unittest.mock import patch
+
+    from django.utils import timezone
+
+    from crm.models import Lead
+    from linkedin.models import ActionLog, LeadCampaignState, Sequence, SequenceStep
+    from linkedin.sequences import executor
+
+    owner = fake_session.django_user
+    seq = Sequence.objects.create(name="pv", owner=owner)
+    root = SequenceStep.objects.create(
+        sequence=seq, branch=SequenceStep.Branch.ROOT,
+        step_type=SequenceStep.StepType.PROFILE_VISIT, config={},
+    )
+    lead = Lead.objects.create(public_identifier="pv1", linkedin_url="https://www.linkedin.com/in/pv1/")
+    campaign = fake_session.campaign
+    campaign.users.add(owner)
+    state = LeadCampaignState.objects.create(
+        lead=lead, campaign=campaign, current_step=root,
+        state=LeadCampaignState.State.ACTIVE, next_action_due_at=timezone.now(),
+    )
+
+    with patch.object(executor, "visit_profile") as visit:
+        executor.advance_state(fake_session, state)
+        assert visit.called  # actually navigated to the profile
+
+    assert ActionLog.objects.filter(action_type="profile_visit", lead=lead).count() == 1

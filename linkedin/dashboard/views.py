@@ -1137,7 +1137,7 @@ def api_activity(request):
 
 @staff_member_required
 def api_senders(request):
-    from linkedin.accounts.limits import daily_count
+    from linkedin.accounts.limits import cap_for, daily_count
     from linkedin.models import LinkedInProfile
 
     senders = []
@@ -1148,7 +1148,16 @@ def api_senders(request):
             "username": a.linkedin_username,
             "active": a.active,
             "has_inmail": a.has_inmail,
-            "usage": {k: {"used": daily_count(a, k), "cap": v} for k, v in caps.items()},
+            # Connect cap = today's EFFECTIVE cap (the per-day random value when
+            # randomisation is on, e.g. 28 for a 20–30 range), not the fixed
+            # stored cap — so the table matches what the scheduler enforces.
+            "usage": {
+                k: {
+                    "used": daily_count(a, k),
+                    "cap": cap_for(a, "connect") if k == "connect" else v,
+                }
+                for k, v in caps.items()
+            },
         })
     return JsonResponse({"senders": senders})
 
