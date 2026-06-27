@@ -4,10 +4,7 @@
 
 <div align="center">
 
-[![GitHub stars](https://img.shields.io/github/stars/eracle/OpenOutreach.svg?style=flat-square&logo=github)](https://github.com/eracle/OpenOutreach/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/eracle/OpenOutreach.svg?style=flat-square&logo=github)](https://github.com/eracle/OpenOutreach/network/members)
 [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=flat-square)](https://www.gnu.org/licenses/gpl-3.0)
-[![Open Issues](https://img.shields.io/github/issues/eracle/OpenOutreach.svg?style=flat-square&logo=github)](https://github.com/eracle/OpenOutreach/issues)
 
 <br/>
 
@@ -19,9 +16,9 @@
 
 ---
 
-### 🚀 What is OpenOutreach?
+### 🚀 What is OpenOutreach for All?
 
-OpenOutreach is a **self-hosted, open-source LinkedIn automation tool** for B2B lead generation. Unlike other tools, **you don't need a list of profiles to contact** — you describe your product and your target market, and the system autonomously discovers, qualifies, and contacts the right people.
+OpenOutreach for All is a **self-hosted, open-source LinkedIn automation tool** for B2B lead generation. Unlike other tools, **you don't need a list of profiles to contact** — you describe your product and your target market, and the system autonomously discovers, qualifies, and contacts the right people.
 
 **How it works:**
 
@@ -266,6 +263,14 @@ This project is built in spare time to provide powerful, **free** open-source gr
 
 ---
 
+## 📜 Attribution
+
+This project is derived from [OpenOutreach](https://github.com/eracle/OpenOutreach) by [eracle](https://github.com/eracle). Original work is licensed under [GNU GPLv3](https://www.gnu.org/licenses/gpl-3.0). Modifications in this repository are also licensed under GPLv3.
+
+See [LICENCE.md](LICENCE.md) for the full license text.
+
+---
+
 ## ⚖️ License
 
 [GNU GPLv3](https://www.gnu.org/licenses/gpl-3.0) — see [LICENCE.md](LICENCE.md)
@@ -279,19 +284,3 @@ This project is built in spare time to provide powerful, **free** open-source gr
 By using this software you accept the [Legal Notice](LEGAL_NOTICE.md). It covers LinkedIn ToS risks, built-in self-promotional actions, automatic newsletter subscription for non-GDPR accounts, and liability disclaimers.
 
 **Use at your own risk — no liability assumed.**
-
----
-
-<div align="center">
-
-<a href="https://star-history.com/#eracle/OpenOutreach&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=eracle/OpenOutreach&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=eracle/OpenOutreach&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=eracle/OpenOutreach&type=Date" width="400" />
- </picture>
-</a>
-
-**Made with ❤️**
-
-</div>
