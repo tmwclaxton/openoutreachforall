@@ -76,9 +76,7 @@ ROOT_URLCONF = "linkedin.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        # Project templates first so linkedin/templates/admin/base_site.html
-        # overrides django.contrib.admin (APP_DIRS would otherwise lose to admin's copy).
-        "DIRS": [ROOT_DIR / "linkedin" / "templates"],
+        "DIRS": [],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [

@@ -17,9 +17,6 @@ from linkedin.models import (
 )
 from linkedin.sequences import executor
 
-admin.site.site_header = "OpenOutreach"
-admin.site.site_title = "OpenOutreach admin"
-admin.site.index_title = "Administration"
 admin.site.site_url = "/dashboard/"
 
 
