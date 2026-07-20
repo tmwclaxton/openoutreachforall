@@ -6,3 +6,6 @@ pytest-django
 pytest-mock
 pytest-cov
 factory-boy
+
+# Local frontend live-reload (templates/static/Python → browser refresh)
+django-browser-reload

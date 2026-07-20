@@ -24,7 +24,9 @@ make build / make up / make stop / make logs / make up-view
 make db       # start Postgres (Docker) on localhost:5432
 make setup    # install deps + browsers + start Postgres + migrate + bootstrap CRM
 make run      # run daemon
-make admin    # Django Admin at localhost:8000/admin/
+make admin    # Django Admin at localhost:8000/admin/ (or :8001 if 8000 is taken)
+              # View site → /dashboard/; `/` redirects there too
+              # django-browser-reload (DEBUG only) auto-refreshes on template/static/Python edits
 
 # Testing
 make test / make docker-test   # make test expects Postgres (make db)

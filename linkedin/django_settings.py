@@ -65,6 +65,12 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
+# Live browser refresh on template/static/Python edits (local DEBUG only).
+if DEBUG:
+    INSTALLED_APPS.append("django_browser_reload")
+    MIDDLEWARE.append("django_browser_reload.middleware.BrowserReloadMiddleware")
+
+
 ROOT_URLCONF = "linkedin.urls"
 
 TEMPLATES = [
