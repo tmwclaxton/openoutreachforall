@@ -16,6 +16,24 @@ OpenAI-compatible provider works. These are prompted during interactive onboardi
 
 These can also be set as environment variables directly.
 
+## Database (Postgres)
+
+Local development defaults to PostgreSQL. Start the Compose service with `make db` (or `make setup`).
+`linkedin/django_settings.py` also reads a project-root `.env` via setdefault.
+
+| Variable | Description | Default |
+|:---------|:------------|:--------|
+| `DATABASE_URL` | Full URL, e.g. `postgres://openoutreach:openoutreach@localhost:5432/openoutreach`. Preferred when set. | (unset) |
+| `POSTGRES_HOST` | DB host | `localhost` |
+| `POSTGRES_PORT` | DB port (Django client) | `5432` |
+| `POSTGRES_DB` | Database name | `openoutreach` |
+| `POSTGRES_USER` | Database user | `openoutreach` |
+| `POSTGRES_PASSWORD` | Database password | `openoutreach` |
+| `POSTGRES_HOST_PORT` | Host port published by Compose (`local.yml`) | `5432` |
+| `USE_SQLITE` | Set `1` to use legacy SQLite at `data/db.sqlite3` | (unset) |
+
+If host port `5432` is already taken, run `POSTGRES_HOST_PORT=5433 make db` and set `POSTGRES_PORT=5433` (or put it in `.env`).
+
 ## Campaign Settings (Django Model)
 
 Campaign data is stored in the `Campaign` Django model (with `name` and `users` M2M), managed via

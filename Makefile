@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help logs test docker-test stop build up up-view install setup run admin view
+.PHONY: help logs test docker-test stop build up up-view install setup run admin view db
 
 help:
 	@perl -nle'print $& if m{^[a-zA-Z_-]+:.*?## .*$$}' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-25s\033[0m %s\n", $$1, $$2}'
@@ -8,23 +8,30 @@ install: ## install all Python dependencies (local dev)
 	pip install uv 2>/dev/null || true
 	uv pip install -r requirements/local.txt
 
-setup: install ## install deps + Playwright browsers + migrate + bootstrap CRM
+db: ## start Postgres (Docker) for local development
+	docker compose -f local.yml up -d db
+	@echo "Waiting for Postgres..."
+	@until docker compose -f local.yml exec -T db pg_isready -U openoutreach -d openoutreach >/dev/null 2>&1; do sleep 1; done
+	@echo "Postgres ready on localhost:$${POSTGRES_HOST_PORT:-5432} (db/user/pass: openoutreach)"
+	@echo "If host port != 5432, export POSTGRES_PORT to match before manage.py / pytest."
+
+setup: install db ## install deps + Playwright browsers + migrate + bootstrap CRM
 	playwright install --with-deps chromium
-	python manage.py migrate --no-input
-	python manage.py setup_crm
+	.venv/bin/python manage.py migrate --no-input
+	.venv/bin/python manage.py setup_crm
 
 run: ## run the daemon
-	python manage.py rundaemon
+	.venv/bin/python manage.py rundaemon
 
-test: ## run the test suite
+test: ## run the test suite (requires Postgres: make db)
 	.venv/bin/pytest
 
 admin: ## start the Django Admin web server
 	@echo ""
 	@echo "  Django Admin: http://localhost:8000/admin/"
-	@echo "  No superuser yet? Run: python manage.py createsuperuser"
+	@echo "  No superuser yet? Run: .venv/bin/python manage.py createsuperuser"
 	@echo ""
-	python manage.py runserver
+	.venv/bin/python manage.py runserver
 
 # Docker targets
 logs: ## follow the logs of the service

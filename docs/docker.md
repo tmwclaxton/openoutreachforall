@@ -71,7 +71,7 @@ cd OpenOutreach
 make up
 ```
 
-This builds the Docker image from source with `BUILD_ENV=local` (includes test dependencies) and starts the daemon.
+This builds the Docker image from source with `BUILD_ENV=local` (includes test dependencies), starts Postgres (`db` service on port 5432, credentials `openoutreach` / `openoutreach` / `openoutreach`), and starts the daemon. For host-side `make setup` / `make admin`, run `make db` first so Postgres is reachable on `localhost:5432`.
 
 **Note:** The compose file uses `HOST_UID` / `HOST_GID` environment variables (defaulting to 1000)
 for file ownership. If your host UID differs from 1000, set them explicitly:
@@ -98,4 +98,4 @@ The live browser view is exposed two ways: the noVNC web viewer at **http://loca
 
 ### Volume Mounts
 
-The pre-built `docker run` command uses a named Docker volume (`openoutreach_db`) mounted at `/app/data` for data persistence (database, config). The compose setup (`local.yml`) mounts the entire repo `.:/app` for live code editing during development.
+The pre-built `docker run` command uses a named Docker volume (`openoutreach_db`) mounted at `/app/data` for data persistence (cookies/caches; older images used SQLite there). The compose setup (`local.yml`) mounts the entire repo `.:/app` for live code editing and persists Postgres in the `postgres_data` volume.

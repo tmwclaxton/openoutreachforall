@@ -17,6 +17,8 @@ from linkedin.models import (
 )
 from linkedin.sequences import executor
 
+admin.site.site_url = "/dashboard/"
+
 
 @admin.register(SiteConfig)
 class SiteConfigAdmin(admin.ModelAdmin):

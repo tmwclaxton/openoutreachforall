@@ -1,6 +1,24 @@
 # local.yml
 
 services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: openoutreach
+      POSTGRES_USER: openoutreach
+      POSTGRES_PASSWORD: openoutreach
+    ports:
+      # Host port overridable when 5432 is already taken (e.g. POSTGRES_HOST_PORT=5433).
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openoutreach -d openoutreach"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
   app:
     build:
       context: .
@@ -10,11 +28,22 @@ services:
     restart: unless-stopped
     stdin_open: true
     tty: true
+    depends_on:
+      db:
+        condition: service_healthy
     environment:
       - ENABLE_VNC=true
       - HOST_UID=${HOST_UID:-1000}
       - HOST_GID=${HOST_GID:-1000}
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=openoutreach
+      - POSTGRES_USER=openoutreach
+      - POSTGRES_PASSWORD=openoutreach
     volumes:
       - .:/app
     ports:
       - "6080:6080"
+
+volumes:
+  postgres_data:

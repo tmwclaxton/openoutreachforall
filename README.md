@@ -86,8 +86,9 @@ For contributors or if you prefer running directly on your machine.
 git clone https://github.com/eracle/OpenOutreach.git
 cd OpenOutreach
 
-# Install deps, Playwright browsers, run migrations, and bootstrap CRM
+# Install deps, start Postgres (Docker), Playwright browsers, migrate, bootstrap CRM
 make setup
+# Or just: make db   # Postgres on localhost:5432 (openoutreach/openoutreach/openoutreach)
 ```
 
 ### 2. Run the Daemon
@@ -194,7 +195,7 @@ Configure rate limits and behavior via Django Admin (LinkedInProfile + Campaign 
 │   ├── conf.py                      # Configuration loading (.env + defaults)
 │   ├── daemon.py                    # Task queue worker loop
 │   ├── db/                          # CRM-backed CRUD (leads, deals, enrichment, chat)
-│   ├── django_settings.py           # Django/CRM settings (SQLite at db.sqlite3)
+│   ├── django_settings.py           # Django/CRM settings (Postgres via DATABASE_URL / POSTGRES_*)
 │   ├── management/setup_crm.py      # Idempotent CRM bootstrap (Dept, Stages, Closing Reasons)
 │   ├── ml/                          # Bayesian qualifier (GPR), embeddings, profile text
 │   ├── models.py                    # Django models (Campaign, LinkedInProfile, Task, etc.)
@@ -203,8 +204,8 @@ Configure rate limits and behavior via Django Admin (LinkedInProfile + Campaign 
 │   ├── setup/                       # GDPR, self-profile, freemium campaign setup
 │   └── tasks/                       # Task handlers (connect, check_pending, follow_up)
 ├── manage.py                         # Django management (no args defaults to rundaemon)
-├── local.yml                        # Docker Compose
-└── Makefile                         # Shortcuts (setup, run, admin, test)
+├── local.yml                        # Docker Compose (app + Postgres)
+└── Makefile                         # Shortcuts (db, setup, run, admin, test)
 ```
 
 ---

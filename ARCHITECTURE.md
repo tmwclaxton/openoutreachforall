@@ -127,7 +127,7 @@ Three apps in `INSTALLED_APPS`:
 - **`setup/seeds.py`** — User-provided seed profiles: parse URLs, create Leads + QUALIFIED Deals.
 - **`management/setup_crm.py`** — Idempotent CRM bootstrap (Site creation).
 - **`admin.py`** — Django Admin: SiteConfig, Campaign, LinkedInProfile, SearchKeyword, ActionLog, Task, ChatMessage.
-- **`django_settings.py`** — Django settings (SQLite at `data/db.sqlite3`). Apps: crm, chat, linkedin.
+- **`django_settings.py`** — Django settings. Default DB is Postgres (`DATABASE_URL` or `POSTGRES_*` env vars; local defaults db/user/password `openoutreach` on `localhost:5432`). SQLite via `USE_SQLITE=1` or `DATABASE_URL=sqlite...` (legacy file was `data/db.sqlite3`). Apps: crm, chat, linkedin.
 
 
 ## `linkedin_cli` — Standalone LinkedIn Library (Django-free)
