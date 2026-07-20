@@ -757,7 +757,7 @@
       </div>
      </div>
       <h2>Lead lists</h2>
-      <div class="tablescroll"><table id="leadlists"><thead><tr><th>Name</th><th>Source</th><th>Leads</th><th>Target</th><th>Export</th><th>Continue</th><th>Add to campaign</th></tr></thead><tbody></tbody></table></div>
+      <table id="leadlists"><thead><tr><th>Name</th><th>Source</th><th>Leads</th><th>Target</th><th>Export</th><th>Continue</th><th>Add to campaign</th></tr></thead><tbody></tbody></table>
     </div>
     <div class="tab" id="tab-campaigns">
       <h2>Create a campaign</h2>
@@ -897,7 +897,7 @@
           <td><input type="checkbox" ${a.has_inmail?"checked":""} id="ac_inmail_${a.id}"></td>
           <td>${a.has_totp?"✓":"—"}</td>
           <td>${a.connect_used}/<input type="number" value="${a.connect_cap}" id="ac_conn_${a.id}" style="width:50px" oninput="checkConnectCaps()" ${a.connect_random_enabled?"disabled":""}>
-            <label style="font-size:11px;display:inline" title="Randomise the daily cap within a range"><input type="checkbox" id="ac_crand_${a.id}" ${a.connect_random_enabled?"checked":""} onchange="onConnRandom(${a.id})"> rand</label>
+            <label style="font-size:11px;display:inline" title="Randomise the daily cap within a range"><input type="checkbox" id="ac_crand_${a.id}" ${a.connect_random_enabled?"checked":""} onchange="onConnRandom(${a.id})"> 🎲</label>
             <span id="ac_crrange_${a.id}" style="${a.connect_random_enabled?"":"display:none"};white-space:nowrap"><input type="number" value="${a.connect_random_min}" id="ac_cmin_${a.id}" style="width:56px" oninput="checkConnectCaps()">–<input type="number" value="${a.connect_random_max}" id="ac_cmax_${a.id}" style="width:56px" oninput="checkConnectCaps()"> <span class="hint">today ${a.connect_today}</span></span></td>
           <td>${a.message_used}/<input type="number" value="${a.message_cap}" id="ac_msg_${a.id}" style="width:58px"></td>
           <td>${a.inmail_used_month}/<input type="number" value="${a.inmail_monthly_cap}" id="ac_inm_${a.id}" style="width:48px"></td>
@@ -979,14 +979,14 @@
     function renderCampaigns(){
       document.querySelector("#camps tbody").innerHTML = ALL_CAMPS.map(c => {
         const toggle = c.status === "active"
-          ? `<button onclick="setCampStatus(${c.id},'paused')">Pause</button>`
-          : `<button onclick="setCampStatus(${c.id},'active')">Activate</button>`;
+          ? `<button onclick="setCampStatus(${c.id},'paused')">⏸ Pause</button>`
+          : `<button onclick="setCampStatus(${c.id},'active')">▶ Activate</button>`;
         const nm = (c.name||'').replace(/'/g,"\\'");
         return `<tr>
           <td><a href="#" onclick="openCampaign(${c.id},'${nm}');return false"><b>${c.name}</b></a></td><td>${c.sequence}</td><td>${c.lead_list||"—"}</td><td>${c.leads}</td>
           <td><span class="pill ${c.status}">${STATUS_LABEL[c.status]||c.status}</span></td>
           <td>${listSelect(c.id)} <button onclick="addLeads(${c.id})">+ Add</button></td>
-          <td>${toggle} <button onclick="openCampaign(${c.id}, '${nm}')">View</button> <button class="no" onclick="setCampStatus(${c.id},'archived')">Archive</button></td>
+          <td>${toggle} <button onclick="openCampaign(${c.id}, '${nm}')">View</button> <button class="no" onclick="setCampStatus(${c.id},'archived')">🗑 Archive</button></td>
         </tr>`;
       }).join("") || `<tr><td colspan="7">No campaigns yet — create one above.</td></tr>`;
     }
@@ -1191,9 +1191,9 @@
         const campOpts = `<option value="">— campaign —</option>` + cd.campaigns.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
         document.querySelector("#leadlists tbody").innerHTML = d.lists.map(l =>
           `<tr><td>${l.name}</td><td>${l.source}</td><td>${l.count}</td>` +
-          `<td>${l.target}${l.pending?' <span class="hint">finding…</span>':''}</td>` +
+          `<td>${l.target}${l.pending?' <span class="hint">⏳ finding…</span>':''}</td>` +
           `<td><a href="api/leadlist/${l.id}/export/">Export CSV</a></td>` +
-          `<td><button onclick="continueList(${l.id}, '${(l.name||'').replace(/'/g,"\\'")}', ${l.target})">Continue / refine</button> <button onclick="openChat(${l.id})">AI chat</button></td>` +
+          `<td><button onclick="continueList(${l.id}, '${(l.name||'').replace(/'/g,"\\'")}', ${l.target})">Continue / refine</button> <button onclick="openChat(${l.id})">💬 AI chat</button></td>` +
           `<td><select id="ll2c_${l.id}">${campOpts}</select> <button onclick="addListToCampaign(${l.id})">Add</button></td></tr>`
         ).join("") || `<tr><td colspan="7">No lists yet.</td></tr>`;
       });
@@ -1269,7 +1269,7 @@
     };
 
     const KPI = { connection_requests:"Connection Requests", connections_accepted:"Connections Accepted", messages_sent:"Messages Sent", inmails_sent:"InMails Sent", posts_liked:"Posts Liked", replies:"Replies", active:"Active", completed:"Completed" };
-    const ACT_LABEL = { connect:"Connection request", connect_accepted:"Connection accepted", message:"Message sent", follow_up:"Follow-up", inmail:"InMail sent", like_post:"Liked post", profile_visit:"Viewed profile" };
+    const ACT_LABEL = { connect:"🤝 Connection request", connect_accepted:"✅ Connection accepted", message:"✉️ Message sent", follow_up:"✉️ Follow-up", inmail:"📨 InMail sent", like_post:"👍 Liked post", profile_visit:"👁️ Viewed profile" };
     function dashQuery(){
       const days = document.getElementById("dashdays").value;
       const camp = document.getElementById("dashcamp").value;
@@ -1303,9 +1303,9 @@
     }
     function activityRow(a){
       const who = a.lead && a.lead !== "—" ? ` — <b>${a.lead}</b>` : "";
-      const profile = a.lead_url ? ` <a href="${a.lead_url}" target="_blank">View profile →</a>` : "";
-      const post = (a.action === "like_post" && a.post_url) ? ` · <a href="${a.post_url}" target="_blank">View liked post →</a>` : "";
-      return `<div class="feedrow"><span><span class="actpill">${ACT_LABEL[a.action]||a.action}</span>${who}${profile}${post}</span> <span class="hint">${a.at} · ${a.account}</span></div>`;
+      const profile = a.lead_url ? ` <a href="${a.lead_url}" target="_blank">View profile ↗</a>` : "";
+      const post = (a.action === "like_post" && a.post_url) ? ` · <a href="${a.post_url}" target="_blank">View liked post ↗</a>` : "";
+      return `<div class="feedrow"><span>${ACT_LABEL[a.action]||a.action}${who}${profile}${post}</span> <span class="hint">${a.at} · ${a.account}</span></div>`;
     }
     function loadActivity(){
       const days = document.getElementById("dashdays").value;
@@ -1418,7 +1418,7 @@
       return `${nodeCard(n)}${childUl}`;
     }
     function renderTree(root){
-      return `<div class="flowtree"><ul><li><div class="tnode start">Campaign start</div><ul><li>${renderNode(root)}</li></ul></li></ul></div>`;
+      return `<div class="flowtree"><ul><li><div class="tnode start">🚀 Campaign start</div><ul><li>${renderNode(root)}</li></ul></li></ul></div>`;
     }
     window.togglePicker = id => { const e=document.getElementById(id); e.style.display = e.style.display==="none"?"inline-block":"none"; };
     window.toggleEd = id => { const e=document.querySelector(`.editor[data-step="${id}"]`); if(e) e.style.display = e.style.display==="none"?"block":"none"; };
